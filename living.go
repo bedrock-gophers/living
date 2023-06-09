@@ -84,7 +84,7 @@ func (e *Living) Hurt(damage float64, src world.DamageSource) (n float64, vulner
 		return 0, false
 	}
 	e.health -= damage
-	if e.health < 0 {
+	if e.Dead() {
 		for _, v := range e.viewers() {
 			v.ViewEntityAction(e, entity.DeathAction{})
 		}
