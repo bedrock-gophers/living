@@ -1,4 +1,4 @@
-package living_entity
+package living
 
 import (
 	"github.com/df-mc/atomic"
