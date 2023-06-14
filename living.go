@@ -1,6 +1,9 @@
 package living
 
 import (
+	"math"
+	"time"
+
 	"github.com/df-mc/atomic"
 	"github.com/df-mc/dragonfly/server/block"
 	"github.com/df-mc/dragonfly/server/block/cube"
@@ -9,8 +12,6 @@ import (
 	"github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
-	"math"
-	"time"
 )
 
 type Living struct {
@@ -35,6 +36,9 @@ type Living struct {
 
 	collidedVertically, collidedHorizontally atomic.Bool
 
+	onHurt func(damage float64, src world.DamageSource) (n float64, vulnerable bool)
+	onHeal func(health float64, src world.HealingSource)
+
 	mc *entity.MovementComputer
 }
 
@@ -56,6 +60,16 @@ func (e *Living) MaxHealth() float64 {
 // SetMaxHealth sets the max health of the entity.
 func (e *Living) SetMaxHealth(v float64) {
 	e.maxHealth = v
+}
+
+// SetOnHurt sets the function called when the entity is hurt.
+func (e *Living) SetOnHurt(f func(damage float64, src world.DamageSource) (n float64, vulnerable bool)) {
+	e.onHurt = f
+}
+
+// SetOnHeal sets the function called when the entity is healed.
+func (e *Living) SetOnHeal(f func(health float64, src world.HealingSource)) {
+	e.onHeal = f
 }
 
 // Drops gets the drops of the entity.
@@ -106,15 +120,19 @@ func (e *Living) Hurt(damage float64, src world.DamageSource) (n float64, vulner
 			v.ViewEntityAction(e, entity.HurtAction{})
 		}
 	}
-	return damage, true
+	if e.onHurt != nil {
+		damage, vulnerable = e.onHurt(damage, src)
+	}
+	return damage, vulnerable
 }
 
 // Heal heals the entity for a given amount of health
-func (e *Living) Heal(health float64, _ world.HealingSource) {
+func (e *Living) Heal(health float64, src world.HealingSource) {
 	e.health += health
 	if e.health > e.maxHealth {
 		e.health = e.maxHealth
 	}
+	e.onHeal(health, src)
 }
 
 // KnockBack knocks the entity back with a given force and height
