@@ -23,6 +23,8 @@ type Living struct {
 
 	drops []item.Stack
 
+	age time.Duration
+
 	lastAttack time.Time
 	rot        cube.Rotation
 
@@ -35,12 +37,13 @@ type Living struct {
 
 	collidedVertically, collidedHorizontally atomic.Bool
 
-	mc *entity.MovementComputer
+	tick func(e *Living)
+	mc   *entity.MovementComputer
 }
 
 // NewLivingEntity creates a new entity based on the data provided.
-func NewLivingEntity(entityType world.EntityType, maxHealth float64, speed float64, drops []item.Stack, mc *entity.MovementComputer, pos mgl64.Vec3, w *world.World) *Living {
-	return &Living{entityType: entityType, health: maxHealth, maxHealth: maxHealth, drops: drops, speed: speed, mc: mc, pos: pos, w: w}
+func NewLivingEntity(entityType world.EntityType, maxHealth float64, speed float64, drops []item.Stack, tick func(e *Living), mc *entity.MovementComputer, pos mgl64.Vec3, w *world.World) *Living {
+	return &Living{entityType: entityType, health: maxHealth, maxHealth: maxHealth, drops: drops, speed: speed, tick: tick, mc: mc, pos: pos, w: w}
 }
 
 // Health returns the current health of the entity.
@@ -61,6 +64,11 @@ func (e *Living) SetMaxHealth(v float64) {
 // Drops gets the drops of the entity.
 func (e *Living) Drops() []item.Stack {
 	return e.drops
+}
+
+// Age returns the age of the entity.
+func (e *Living) Age() time.Duration {
+	return e.age
 }
 
 // OnGround checks if the entity is considered to be on the ground.
@@ -165,8 +173,9 @@ func (e *Living) SetSpeed(f float64) {
 	e.speed = f
 }
 
-// Close ...
+// Close closes the Living entity and removes the associated entity from the world.
 func (e *Living) Close() error {
+	e.World().RemoveEntity(e)
 	return nil
 }
 
@@ -178,6 +187,11 @@ func (e *Living) Position() mgl64.Vec3 {
 // Rotation returns the rotation of the entity.
 func (e *Living) Rotation() cube.Rotation {
 	return e.rot
+}
+
+// SetRotation sets the entity rotation.
+func (e *Living) SetRotation(rotation cube.Rotation) {
+	e.rot = rotation
 }
 
 // World returns the world the entity is in.
@@ -238,11 +252,17 @@ func (e *Living) FallDistance() float64 {
 
 // Tick ...
 func (e *Living) Tick(w *world.World, current int64) {
+	if e.tick != nil {
+		e.tick(e)
+	}
+
 	m := e.mc.TickMovement(e, e.Position(), e.Velocity(), cube.Rotation{e.rot.Yaw(), e.rot.Pitch()})
 	m.Send()
 
 	e.vel = m.Velocity()
 	e.Move(m.Position().Sub(e.Position()), 0, 0)
+
+	e.age += time.Second / 20
 }
 
 // Move handles the entity's movement.
@@ -274,7 +294,7 @@ func (e *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64) {
 	horizontalVel[1] = 0
 
 	e.onGround.Store(e.checkOnGround(w))
-	//e.updateFallState(deltaPos[1])
+	e.updateFallState(deltaPos[1])
 }
 
 // checkOnGround checks if the entity is on the ground.
