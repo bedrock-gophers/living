@@ -37,13 +37,13 @@ type Living struct {
 
 	collidedVertically, collidedHorizontally atomic.Bool
 
-	tick func(e *Living)
-	mc   *entity.MovementComputer
+	h  atomic.Value[Handler]
+	mc *entity.MovementComputer
 }
 
 // NewLivingEntity creates a new entity based on the data provided.
-func NewLivingEntity(entityType world.EntityType, maxHealth float64, speed float64, drops []item.Stack, tick func(e *Living), mc *entity.MovementComputer, pos mgl64.Vec3, w *world.World) *Living {
-	return &Living{entityType: entityType, health: maxHealth, maxHealth: maxHealth, drops: drops, speed: speed, tick: tick, mc: mc, pos: pos, w: w}
+func NewLivingEntity(entityType world.EntityType, maxHealth float64, speed float64, drops []item.Stack, mc *entity.MovementComputer, pos mgl64.Vec3, w *world.World) *Living {
+	return &Living{entityType: entityType, health: maxHealth, maxHealth: maxHealth, drops: drops, speed: speed, mc: mc, pos: pos, w: w}
 }
 
 // Health returns the current health of the entity.
@@ -123,6 +123,14 @@ func (e *Living) Heal(health float64, _ world.HealingSource) {
 	if e.health > e.maxHealth {
 		e.health = e.maxHealth
 	}
+}
+
+// Handle sets the entity handler.
+func (e *Living) Handle(h Handler) {
+	if h == nil {
+		h = NopHandler{}
+	}
+	e.h.Store(h)
 }
 
 // KnockBack knocks the entity back with a given force and height
@@ -252,8 +260,8 @@ func (e *Living) FallDistance() float64 {
 
 // Tick ...
 func (e *Living) Tick(w *world.World, current int64) {
-	if e.tick != nil {
-		e.tick(e)
+	if e.Handler() != nil {
+		e.Handler().HandleTick(e)
 	}
 
 	m := e.mc.TickMovement(e, e.Position(), e.Velocity(), cube.Rotation{e.rot.Yaw(), e.rot.Pitch()})
@@ -287,7 +295,7 @@ func (e *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64) {
 	if deltaPos.Len() <= 3 {
 		// Only update velocity if the player is not moving too fast to prevent potential OOMs.
 		e.vel = deltaPos
-		//e.checkBlockCollisions(deltaPos, w)
+		e.checkBlockCollisions(deltaPos, w)
 	}
 
 	horizontalVel := deltaPos
@@ -401,7 +409,22 @@ func (e *Living) checkEntityInsiders(w *world.World, entityBBox cube.BBox) {
 	}
 }
 
+// CollidedHorizontally checks if the entity collided Horizontally
+func (e *Living) CollidedHorizontally() bool {
+	return e.collidedHorizontally.Load()
+}
+
+// CollidedVertically checks if the entity collided Vertically
+func (e *Living) CollidedVertically() bool {
+	return e.collidedVertically.Load()
+}
+
 // viewers returns a list of all viewers of the Player.
 func (e *Living) viewers() []world.Viewer {
 	return e.World().Viewers(e.Position())
+}
+
+// Handler returns the Handler of the entity.
+func (e *Living) Handler() Handler {
+	return e.h.Load()
 }
