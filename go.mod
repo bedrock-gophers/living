@@ -1,4 +1,4 @@
-module github.com/bedrock-gophers/living-entity
+module github.com/bedrock-gophers/living
 
 go 1.21
 
