@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/bedrock-gophers/living-entity/living"
+	"github.com/bedrock-gophers/living/living"
 	"github.com/df-mc/dragonfly/server"
 	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/entity"

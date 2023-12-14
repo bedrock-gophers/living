@@ -8,6 +8,7 @@ require (
 	github.com/df-mc/atomic v1.10.0
 	github.com/df-mc/dragonfly v0.9.13-0.20231210131520-21eb18fd3299
 	github.com/go-gl/mathgl v1.1.0
+	github.com/sirupsen/logrus v1.9.3
 )
 
 require (
@@ -21,12 +22,10 @@ require (
 	github.com/google/uuid v1.5.0 // indirect
 	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/muhammadmuzzammil1998/jsonc v1.0.0 // indirect
-	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/sandertv/go-raknet v1.12.1 // indirect
 	github.com/sandertv/gophertunnel v1.34.1 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	golang.org/x/crypto v0.16.0 // indirect
 	golang.org/x/exp v0.0.0-20231214170342-aacd6d4b4611 // indirect
