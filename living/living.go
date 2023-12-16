@@ -71,6 +71,9 @@ func (e *Living) NameTag() string {
 // SetNameTag sets the name tag of the entity.
 func (e *Living) SetNameTag(tag string) {
 	e.tag.Store(tag)
+	for _, v := range e.viewers() {
+		v.ViewEntityState(e)
+	}
 }
 
 // Drops gets the drops of the entity.
