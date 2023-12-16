@@ -6,6 +6,7 @@ import (
 	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/entity"
 	"github.com/df-mc/dragonfly/server/entity/effect"
+	"github.com/df-mc/dragonfly/server/event"
 	"github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
@@ -20,6 +21,7 @@ type Living struct {
 
 	health    float64
 	maxHealth float64
+	tag       atomic.Value[string]
 
 	drops []item.Stack
 
@@ -61,6 +63,16 @@ func (e *Living) SetMaxHealth(v float64) {
 	e.maxHealth = v
 }
 
+// NameTag returns the name tag of the entity.
+func (e *Living) NameTag() string {
+	return e.tag.Load()
+}
+
+// SetNameTag sets the name tag of the entity.
+func (e *Living) SetNameTag(tag string) {
+	e.tag.Store(tag)
+}
+
 // Drops gets the drops of the entity.
 func (e *Living) Drops() []item.Stack {
 	return e.drops
@@ -91,6 +103,13 @@ func (e *Living) Hurt(damage float64, src world.DamageSource) (n float64, vulner
 	if e.AttackImmune() {
 		return 0, false
 	}
+
+	c := event.C()
+	e.Handler().HandleHurt(c, damage, src)
+	if c.Cancelled() {
+		return 0, false
+	}
+
 	e.health -= damage
 	if e.Dead() {
 		for _, v := range e.viewers() {
@@ -114,6 +133,7 @@ func (e *Living) Hurt(damage float64, src world.DamageSource) (n float64, vulner
 			v.ViewEntityAction(e, entity.HurtAction{})
 		}
 	}
+
 	return damage, true
 }
 
@@ -261,7 +281,7 @@ func (e *Living) FallDistance() float64 {
 // Tick ...
 func (e *Living) Tick(w *world.World, current int64) {
 	if e.Handler() != nil {
-		e.Handler().HandleTick(e)
+		e.Handler().HandleTick()
 	}
 
 	m := e.mc.TickMovement(e, e.Position(), e.Velocity(), cube.Rotation{e.rot.Yaw(), e.rot.Pitch()})

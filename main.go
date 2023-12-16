@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"github.com/bedrock-gophers/living/living"
 	"github.com/df-mc/dragonfly/server"
 	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/entity"
+	"github.com/df-mc/dragonfly/server/event"
 	"github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/player/chat"
@@ -40,6 +42,8 @@ func accept(p *player.Player) {
 		Drag:              0.02,
 		DragBeforeGravity: true,
 	}, p.Position(), p.World())
+	enderman.SetNameTag("Enderman")
+	enderman.Handle(handler{e: enderman})
 
 	p.World().AddEntity(enderman)
 }
@@ -51,4 +55,13 @@ func (entityTypeEnderman) EncodeEntity() string {
 }
 func (entityTypeEnderman) BBox(world.Entity) cube.BBox {
 	return cube.Box(-0.3, 0, -0.3, 0.3, 2.9, 0.3)
+}
+
+type handler struct {
+	living.NopHandler
+	e *living.Living
+}
+
+func (handler) HandleHurt(ctx *event.Context, damage float64, src world.DamageSource) {
+	fmt.Println("enderman hurt")
 }
