@@ -96,6 +96,11 @@ func (e *Living) Dead() bool {
 	return e.health <= 0
 }
 
+// TriggerLastAttack triggers the last attack of the entity.
+func (e *Living) TriggerLastAttack() {
+	e.lastAttack = time.Now()
+}
+
 // AttackImmune checks if the entity is currently immune to entity attacks
 func (e *Living) AttackImmune() bool {
 	return time.Since(e.lastAttack) <= 470*time.Millisecond
