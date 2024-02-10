@@ -2,6 +2,13 @@
 
 The Living library provides tools for creating and managing living entities within the Minecraft world. Whether you're spawning custom mobs or adding unique behaviors to existing ones, Living offers an easy-to-use framework for implementing complex entity logic.
 
+# Importing Living into your project:
+
+You may import Living by running the following command:
+```bash
+go get github.com/bedrock-gophers/living
+```
+
 ## Adding a Living Entity to Your World
 
 To add a living entity to your world, you can use the following example code:
