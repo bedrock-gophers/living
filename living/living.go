@@ -45,7 +45,7 @@ type Living struct {
 
 // NewLivingEntity creates a new entity based on the data provided.
 func NewLivingEntity(entityType world.EntityType, maxHealth float64, speed float64, drops []item.Stack, mc *entity.MovementComputer, pos mgl64.Vec3, w *world.World) *Living {
-	return &Living{entityType: entityType, health: maxHealth, maxHealth: maxHealth, drops: drops, speed: speed, mc: mc, pos: pos, w: w}
+	return &Living{entityType: entityType, health: maxHealth, maxHealth: maxHealth, drops: drops, speed: speed, mc: mc, pos: pos, w: w, h: *atomic.NewValue[Handler](NopHandler{})}
 }
 
 // Health returns the current health of the entity.
@@ -288,10 +288,6 @@ func (e *Living) FallDistance() float64 {
 
 // Tick ...
 func (e *Living) Tick(w *world.World, current int64) {
-	if e.Handler() != nil {
-		e.Handler().HandleTick()
-	}
-
 	m := e.mc.TickMovement(e, e.Position(), e.Velocity(), cube.Rotation{e.rot.Yaw(), e.rot.Pitch()})
 	m.Send()
 
