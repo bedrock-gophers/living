@@ -293,8 +293,16 @@ func (e *Living) Tick(w *world.World, current int64) {
 
 	e.vel = m.Velocity()
 	e.Move(m.Position().Sub(e.Position()), 0, 0)
+	e.Move(m.Position().Sub(e.Position()), 0, 0)
 
 	e.age += time.Second / 20
+}
+
+// Explode ...
+func (e *Living) Explode(explosionPos mgl64.Vec3, impact float64, c block.ExplosionConfig) {
+	diff := e.Position().Sub(explosionPos)
+	e.Hurt(math.Floor((impact*impact+impact)*3.5*c.Size+1), entity.ExplosionDamageSource{})
+	e.KnockBack(explosionPos, impact, diff[1]/diff.Len()*impact)
 }
 
 // Move handles the entity's movement.
