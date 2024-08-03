@@ -12,6 +12,7 @@ import (
 	"github.com/go-gl/mathgl/mgl64"
 	"math"
 	"time"
+	"sync"
 )
 
 type Living struct {
@@ -41,6 +42,8 @@ type Living struct {
 
 	h  atomic.Value[Handler]
 	mc *entity.MovementComputer
+
+	data sync.Map
 }
 
 // NewLivingEntity creates a new entity based on the data provided.
@@ -459,4 +462,15 @@ func (e *Living) viewers() []world.Viewer {
 // Handler returns the Handler of the entity.
 func (e *Living) Handler() Handler {
 	return e.h.Load()
+}
+
+// Stores value at runtime. To store it even after server restarts, you'll need to encode/decode NBT.
+func (e *Living) WithValue(key string, value any) {
+	e.data.Store(key, value)
+}
+
+// Retrieves value at runtime. To store it even after server restarts, you'll need to encode/decode NBT. Returns the value and whether it exists.
+func (e *Living) Value(key string) (any, bool) {
+	value, exists := e.data.Load(key)
+	return value, exists
 }
