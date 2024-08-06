@@ -470,7 +470,6 @@ func (e *Living) WithValue(key string, value any) {
 }
 
 // Value Retrieves value at runtime. To store it even after server restarts, you'll need to encode/decode NBT. Returns the value and whether it exists.
-func (e *Living) Value(key string) any {
-	value, _ := e.values.Load(key)
-	return value
+func (e *Living) Value(key string) (any, bool) {
+	return e.values.Load(key)
 }
