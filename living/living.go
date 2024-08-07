@@ -43,7 +43,8 @@ type Living struct {
 	h  atomic.Value[Handler]
 	mc *entity.MovementComputer
 
-	values sync.Map
+	variant int32
+	values  sync.Map
 }
 
 // NewLivingEntity creates a new entity based on the data provided.
@@ -462,6 +463,16 @@ func (e *Living) viewers() []world.Viewer {
 // Handler returns the Handler of the entity.
 func (e *Living) Handler() Handler {
 	return e.h.Load()
+}
+
+// WithVariant sets the entity's variant to which is in entity_metadata.go. This is user in texture packs for querying. See https://wiki.bedrock.dev/entities/render-controllers.html#render-controller-1
+func (e *Living) WithVariant(variant int32) {
+	e.variant = variant
+}
+
+// Variant returns the entity's variant to which is in entity_metadata.go. This is user in texture packs for querying. See https://wiki.bedrock.dev/entities/render-controllers.html#render-controller-1
+func (e *Living) Variant() int32 {
+	return e.variant
 }
 
 // WithValue Stores value at runtime. To store it even after server restarts, you'll need to encode/decode NBT.
