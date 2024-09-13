@@ -300,6 +300,7 @@ func (e *Living) Tick(w *world.World, current int64) {
 	e.Move(m.Position().Sub(e.Position()), 0, 0)
 
 	e.age += time.Second / 20
+	e.Handler().HandleTick()
 }
 
 // Explode ...
