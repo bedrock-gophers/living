@@ -38,18 +38,38 @@ type Living struct {
 	onGround     atomic.Bool
 	fallDistance atomic.Float64
 
+	breathing               atomic.Bool
+	airSupply, maxAirSupply time.Duration
+
+	immobile, invisible atomic.Bool
+	scale               atomic.Float64
+	owner               atomic.Value[world.Entity]
+
+	scoreTag atomic.Value[string]
+
 	collidedVertically, collidedHorizontally atomic.Bool
 
 	h  atomic.Value[Handler]
 	mc *entity.MovementComputer
 
-	variant int32
-	values  sync.Map
+	variant   int32
+	values    sync.Map
 }
 
 // NewLivingEntity creates a new entity based on the data provided.
 func NewLivingEntity(entityType world.EntityType, maxHealth float64, speed float64, drops []item.Stack, mc *entity.MovementComputer, pos mgl64.Vec3, w *world.World) *Living {
-	return &Living{entityType: entityType, health: maxHealth, maxHealth: maxHealth, drops: drops, speed: speed, mc: mc, pos: pos, w: w, h: *atomic.NewValue[Handler](NopHandler{})}
+	return &Living{
+		entityType: entityType,
+		health:     maxHealth,
+		maxHealth:  maxHealth,
+		drops:      drops,
+		speed:      speed,
+		scale:      *atomic.NewFloat64(1),
+		mc:         mc,
+		pos:        pos,
+		w:          w,
+		h:          *atomic.NewValue[Handler](NopHandler{}),
+	}
 }
 
 // Health returns the current health of the entity.
@@ -232,6 +252,94 @@ func (e *Living) Rotation() cube.Rotation {
 // SetRotation sets the entity rotation.
 func (e *Living) SetRotation(rotation cube.Rotation) {
 	e.rot = rotation
+}
+
+// Breathing returns if the entity can currently breathe.
+func (e *Living) Breathing() bool {
+	return e.breathing.Load()
+}
+
+// SetBreathing sets if the entity can breathe.
+func (e *Living) SetBreathing(isBreathing bool) {
+	e.breathing.Store(isBreathing)
+	e.updateState()
+}
+
+// AirSupply returns the current air supply of the entity.
+func (e *Living) AirSupply() time.Duration {
+	return e.airSupply
+}
+
+// SetAirSupply sets the current air supply of the entity.
+func (e *Living) SetAirSupply(duration time.Duration) {
+	e.airSupply = duration
+	e.updateState()
+}
+
+// MaxAirSupply returns the maximum air supply the entity can use to breathe under water.
+func (e *Living) MaxAirSupply() time.Duration {
+	return e.maxAirSupply
+}
+
+// SetMaxAirSupply sets the maximum air supply the entity can use to breathe under water.
+func (e *Living) SetMaxAirSupply(duration time.Duration) {
+	e.maxAirSupply = duration
+	e.updateState()
+}
+
+// Immobile returns the ability of the entity to move.
+func (e *Living) Immobile() bool {
+	return e.immobile.Load()
+}
+
+// SetImmobile stops the entity from moving if set to true and vice versa.
+func (e *Living) SetImmobile(immobile bool) {
+	e.immobile.Store(immobile)
+	e.updateState()
+}
+
+// Invisible returns whether the entity is visible.
+func (e *Living) Invisible() bool {
+	return e.invisible.Load()
+}
+
+// SetInvisible alters the visibility of the entity.
+func (e *Living) SetInvisible(invisible bool) {
+	e.invisible.Store(invisible)
+	e.updateState()
+}
+
+// Owner returns the owner of the entity.
+func (e *Living) Owner() world.Entity {
+	return e.owner.Load()
+}
+
+// SetOwner sets the owner of the entity.
+func (e *Living) SetOwner(ent world.Entity) {
+	e.owner.Store(ent)
+	e.updateState()
+}
+
+// Scale returns the current scale of the entity.
+func (e *Living) Scale() float64 {
+	return e.scale.Load()
+}
+
+// SetScale sets the scale of the entity. Scale ranges from 0.0 to 1.0 .
+func (e *Living) SetScale(scale float64) {
+	e.scale.Store(scale)
+	e.updateState()
+}
+
+// ScoreTag returns the score tag of the entity.
+func (e *Living) ScoreTag() string {
+	return e.scoreTag.Load()
+}
+
+// SetScoreTag sets the score tag of the entity.
+func (e *Living) SetScoreTag(scoreTag string) {
+	e.scoreTag.Store(scoreTag)
+	e.updateState()
 }
 
 // World returns the world the entity is in.
@@ -484,4 +592,11 @@ func (e *Living) WithValue(key string, value any) {
 // Value Retrieves value at runtime. To store it even after server restarts, you'll need to encode/decode NBT. Returns the value and whether it exists.
 func (e *Living) Value(key string) (any, bool) {
 	return e.values.Load(key)
+}
+
+// updateState updates the state of the player to all viewers of the entity.
+func (e *Living) updateState() {
+	for _, v := range e.viewers() {
+		v.ViewEntityState(e)
+	}
 }
