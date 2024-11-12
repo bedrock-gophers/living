@@ -28,8 +28,9 @@ type Living struct {
 
 	age time.Duration
 
-	lastAttack time.Time
-	rot        cube.Rotation
+	hitRegistration time.Duration
+	lastAttack      time.Time
+	rot             cube.Rotation
 
 	pos mgl64.Vec3
 	vel mgl64.Vec3
@@ -52,8 +53,8 @@ type Living struct {
 	h  atomic.Value[Handler]
 	mc *entity.MovementComputer
 
-	variant   int32
-	values    sync.Map
+	variant int32
+	values  sync.Map
 }
 
 // NewLivingEntity creates a new entity based on the data provided.
@@ -67,6 +68,7 @@ func NewLivingEntity(entityType world.EntityType, maxHealth float64, speed float
 		breathing:  *atomic.NewBool(true),
 		scale:      *atomic.NewFloat64(1),
 		mc:         mc,
+		hitRegistration: 470*time.Millisecond,
 		pos:        pos,
 		w:          w,
 		h:          *atomic.NewValue[Handler](NopHandler{}),
@@ -121,6 +123,11 @@ func (e *Living) Dead() bool {
 	return e.health <= 0
 }
 
+// SetHitRegistrationDuration sets the duration of the entity's attack immunity (usually ranges from 7-10 ticks or 350-500 milliseconds)
+func (e *Living) SetHitRegistrationDuration(duration time.Duration) {
+	e.hitRegistration = duration
+}
+
 // TriggerLastAttack triggers the last attack of the entity.
 func (e *Living) TriggerLastAttack() {
 	e.lastAttack = time.Now()
@@ -128,7 +135,7 @@ func (e *Living) TriggerLastAttack() {
 
 // AttackImmune checks if the entity is currently immune to entity attacks
 func (e *Living) AttackImmune() bool {
-	return time.Since(e.lastAttack) <= 470*time.Millisecond
+	return time.Since(e.lastAttack) <= e.hitRegistration
 }
 
 // Hurt hurts the entity for a given amount of damage.
