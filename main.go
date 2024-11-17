@@ -12,6 +12,7 @@ import (
 	"github.com/df-mc/dragonfly/server/player/chat"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/sirupsen/logrus"
+	"log/slog"
 	"math/rand"
 )
 
@@ -22,7 +23,7 @@ func main() {
 
 	chat.Global.Subscribe(chat.StdoutSubscriber{})
 
-	conf, err := server.DefaultConfig().Config(log)
+	conf, err := server.DefaultConfig().Config(slog.Default())
 	if err != nil {
 		log.Fatalln(err)
 	}
