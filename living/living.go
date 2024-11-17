@@ -68,7 +68,7 @@ func NewLivingEntity(entityType world.EntityType, maxHealth float64, speed float
 		breathing:  *atomic.NewBool(true),
 		scale:      *atomic.NewFloat64(1),
 		mc:         mc,
-		hitRegistration: 470*time.Millisecond,
+		hitRegistration: 500*time.Millisecond,
 		pos:        pos,
 		w:          w,
 		h:          *atomic.NewValue[Handler](NopHandler{}),
