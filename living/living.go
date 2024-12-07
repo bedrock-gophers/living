@@ -1,7 +1,6 @@
 package living
 
 import (
-	"fmt"
 	"github.com/df-mc/dragonfly/server/block"
 	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/block/model"
@@ -18,6 +17,7 @@ import (
 )
 
 var _ = world.Entity(&Living{})
+var _ = entity.Living(&Living{})
 
 type Living struct {
 	handle *world.EntityHandle
@@ -27,16 +27,17 @@ type Living struct {
 	*livingData
 }
 
+func (l *Living) Heal(health float64, src world.HealingSource) {
+	l.AddHealth(health)
+}
+
 func (l *Living) Hurt(dmg float64, src world.DamageSource) (float64, bool) {
-	fmt.Println("getting here?")
 	if l.Dead() || dmg < 0 {
-		fmt.Println("here3")
 		return 0, false
 	}
 	totalDamage := dmg
 	damageLeft := totalDamage
 
-	fmt.Println(l.immuneUntil)
 	immune := time.Now().Before(l.immuneUntil)
 	if immune {
 		if damageLeft = damageLeft - l.lastDamage; damageLeft <= 0 {
@@ -44,7 +45,6 @@ func (l *Living) Hurt(dmg float64, src world.DamageSource) (float64, bool) {
 		}
 	}
 
-	fmt.Println("gone here")
 	immunity := time.Second / 2
 	ctx := event.C(l)
 	if l.handler.HandleHurt(ctx, totalDamage, immune, &immunity, src); ctx.Cancelled() {
