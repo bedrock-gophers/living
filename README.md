@@ -14,18 +14,19 @@ go get github.com/bedrock-gophers/living
 To add a living entity to your world, you can use the following example code:
 
 ```go
-func main() {
-    // Example code to add an Enderman entity to the world
-    enderman := living.NewLivingEntity(entityTypeEnderman{}, 40, 0.3, []item.Stack{item.NewStack(item.EnderPearl{}, rand.Intn(2)+1)}, &entity.MovementComputer{
-    	Gravity:           0.08,
-    	Drag:              0.02,
-    	DragBeforeGravity: true,
-    }, p.Position(), p.World())
-    
-    enderman.SetNameTag("Enderman")
-    enderman.Handle(handler{e: enderman})
-    
-    p.World().AddEntity(enderman)
+func accept(p *player.Player) {
+    opts := world.EntitySpawnOpts{
+        Position: p.Position(),
+    }
+
+    conf := living.Config{
+                EntityType: entityTypeEnderman{},
+                Handler:    handler{}, 
+                Drops: []living.Drop{
+                    living.NewDrop(item.EnderPearl{}, 0, 2),
+                },
+        }
+    p.Tx().AddEntity(opts.New(conf.EntityType, conf))
 }
 ```
 
@@ -49,11 +50,10 @@ func (entityTypeEnderman) BBox(world.Entity) cube.BBox {
 // handler represents a basic event handler for our endermen.
 type handler struct {
 	living.NopHandler
-	e *living.Living
 }
 
 // HandleHurt ...
-func (handler) HandleHurt(ctx *event.Context, damage float64, src world.DamageSource) {
+func (handler) HandleHurt(ctx *living.Context, damage float64, src world.DamageSource) {
 	fmt.Println("enderman hurt")
 }
 ```
