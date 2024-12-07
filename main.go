@@ -43,6 +43,7 @@ func accept(p *player.Player) {
 	conf := living.Config{
 		EntityType: entityTypeEnderman{},
 		Handler:    handler{},
+		MaxHealth:  40,
 		Drops: []living.Drop{
 			living.NewDrop(item.EnderPearl{}, 0, 2),
 		},

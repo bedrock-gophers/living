@@ -9,6 +9,7 @@ type Config struct {
 	EntityType world.EntityType
 	Handler    Handler
 	Drops      []Drop
+	MaxHealth  float64
 }
 
 func (c Config) Apply(data *world.EntityData) {
@@ -23,7 +24,7 @@ func (c Config) Apply(data *world.EntityData) {
 	data.Data = &livingData{
 		drops:         c.Drops,
 		entityType:    c.EntityType,
-		HealthManager: entity.NewHealthManager(20, 20),
+		HealthManager: entity.NewHealthManager(c.MaxHealth, c.MaxHealth),
 		mc:            &entity.MovementComputer{Gravity: 0.08, Drag: 0.02, DragBeforeGravity: true},
 		speed:         0.1,
 		handler:       c.Handler,
