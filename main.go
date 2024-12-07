@@ -5,12 +5,13 @@ import (
 	"github.com/bedrock-gophers/living/living"
 	"github.com/df-mc/dragonfly/server"
 	"github.com/df-mc/dragonfly/server/block/cube"
-	"github.com/df-mc/dragonfly/server/event"
+	"github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/player/chat"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/sirupsen/logrus"
 	"log/slog"
+	"time"
 )
 
 func main() {
@@ -41,6 +42,10 @@ func accept(p *player.Player) {
 
 	conf := living.Config{
 		EntityType: entityTypeEnderman{},
+		Handler:    handler{},
+		Drops: []living.Drop{
+			living.NewDrop(item.EnderPearl{}, 0, 2),
+		},
 	}
 	p.Tx().AddEntity(opts.New(conf.EntityType, conf))
 }
@@ -58,9 +63,8 @@ func (entityTypeEnderman) BBox(world.Entity) cube.BBox {
 
 type handler struct {
 	living.NopHandler
-	e *living.Living
 }
 
-func (handler) HandleHurt(ctx *event.Context[world.Entity], damage float64, src world.DamageSource) {
+func (handler) HandleHurt(ctx *living.Context, damage float64, immune bool, immunity *time.Duration, src world.DamageSource) {
 	fmt.Println("enderman hurt")
 }

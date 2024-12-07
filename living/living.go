@@ -1,23 +1,25 @@
 package living
 
 import (
+	"fmt"
 	"github.com/df-mc/dragonfly/server/block"
 	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/block/model"
 	"github.com/df-mc/dragonfly/server/entity"
 	"github.com/df-mc/dragonfly/server/entity/effect"
+	"github.com/df-mc/dragonfly/server/event"
+	"github.com/df-mc/dragonfly/server/item/enchantment"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/df-mc/dragonfly/server/world/sound"
 	"github.com/go-gl/mathgl/mgl64"
 	"math"
+	"math/rand"
 	"time"
 )
 
 var _ = world.Entity(&Living{})
 
 type Living struct {
-	*entity.HealthManager
-
 	handle *world.EntityHandle
 	tx     *world.Tx
 	data   *world.EntityData
@@ -25,58 +27,60 @@ type Living struct {
 	*livingData
 }
 
-func (p *Living) Hurt(dmg float64, src world.DamageSource) (float64, bool) {
-	if p.Dead() || dmg < 0 {
+func (l *Living) Hurt(dmg float64, src world.DamageSource) (float64, bool) {
+	fmt.Println("getting here?")
+	if l.Dead() || dmg < 0 {
+		fmt.Println("here3")
 		return 0, false
 	}
 	totalDamage := dmg
 	damageLeft := totalDamage
 
-	immune := time.Now().Before(p.immuneUntil)
+	fmt.Println(l.immuneUntil)
+	immune := time.Now().Before(l.immuneUntil)
 	if immune {
-		if damageLeft = damageLeft - p.lastDamage; damageLeft <= 0 {
+		if damageLeft = damageLeft - l.lastDamage; damageLeft <= 0 {
 			return 0, false
 		}
+	}
+
+	fmt.Println("gone here")
+	immunity := time.Second / 2
+	ctx := event.C(l)
+	if l.handler.HandleHurt(ctx, totalDamage, immune, &immunity, src); ctx.Cancelled() {
 		return 0, false
 	}
+	l.setAttackImmunity(immunity, totalDamage)
+	l.AddHealth(-damageLeft)
 
-	immunity := time.Second / 2
-	//ctx := event.C(p)
-	//if p.Handler().HandleHurt(ctx, &damageLeft, immune, &immunity, src); ctx.Cancelled() {
-	//	return 0, false
-	//}
-	p.setAttackImmunity(immunity, totalDamage)
-	p.AddHealth(-damageLeft)
-
-	pos := p.Position()
-	for _, viewer := range p.viewers() {
-		viewer.ViewEntityAction(p, entity.HurtAction{})
+	pos := l.Position()
+	for _, viewer := range l.viewers() {
+		viewer.ViewEntityAction(l, entity.HurtAction{})
 	}
 	if src.Fire() {
-		p.tx.PlaySound(pos, sound.Burning{})
+		l.tx.PlaySound(pos, sound.Burning{})
 	} else if _, ok := src.(entity.DrowningDamageSource); ok {
-		p.tx.PlaySound(pos, sound.Drowning{})
+		l.tx.PlaySound(pos, sound.Drowning{})
 	}
 
-	if p.Dead() {
-		p.kill(src)
+	if l.Dead() {
+		l.kill(src)
 	}
 	return totalDamage, true
 }
 
-func (p *Living) kill(src world.DamageSource) {
-	for _, viewer := range p.viewers() {
-		viewer.ViewEntityAction(p, entity.DeathAction{})
+func (l *Living) kill(src world.DamageSource) {
+	for _, viewer := range l.viewers() {
+		viewer.ViewEntityAction(l, entity.DeathAction{})
 	}
 
-	p.AddHealth(-p.MaxHealth())
-	//p.Handler().HandleDeath(p, src, &keepInv)
-	p.dropItems()
+	l.AddHealth(-l.MaxHealth())
+	l.dropItems()
 
 	// Wait a little before removing the entity. The client displays a death
 	// animation while the player is dying.
 	time.AfterFunc(time.Millisecond*1100, func() {
-		p.H().ExecWorld(finishDying)
+		l.H().ExecWorld(finishDying)
 	})
 }
 
@@ -86,46 +90,44 @@ func finishDying(_ *world.Tx, e world.Entity) {
 	_ = p.Close()
 }
 
-func (p *Living) dropItems() {
-	/*pos := p.Position()
+func (l *Living) dropItems() {
+	pos := l.Position()
 	for _, orb := range entity.NewExperienceOrbs(pos, int(math.Min(float64(1*7), 100))) {
-		p.tx.AddEntity(orb)
+		l.tx.AddEntity(orb)
 	}
-	p.MoveItemsToInventory()
-	for _, it := range append(p.inv.Clear(), append(p.armour.Clear(), p.offHand.Clear()...)...) {
+	for _, d := range l.drops {
+		it := d.Stack()
+		if it.Empty() {
+			continue
+		}
 		if _, ok := it.Enchantment(enchantment.CurseOfVanishing); ok {
 			continue
 		}
 		opts := world.EntitySpawnOpts{Position: pos, Velocity: mgl64.Vec3{rand.Float64()*0.2 - 0.1, 0.2, rand.Float64()*0.2 - 0.1}}
-		p.tx.AddEntity(entity.NewItem(opts, it))
-	}*/
+		l.tx.AddEntity(entity.NewItem(opts, it))
+	}
 }
 
 // setAttackImmunity sets the duration the player is immune to entity attacks.
-func (p *Living) setAttackImmunity(d time.Duration, dmg float64) {
-	p.immuneUntil = time.Now().Add(d)
-	p.lastDamage = dmg
-}
-
-func (l Living) Heal(health float64, src world.HealingSource) {
-	//TODO implement me
-	panic("implement me")
+func (l *Living) setAttackImmunity(d time.Duration, dmg float64) {
+	l.immuneUntil = time.Now().Add(d)
+	l.lastDamage = dmg
 }
 
 // KnockBack knocks the player back with a given force and height. A source is passed which indicates the
 // source of the velocity, typically the position of an attacking entity. The source is used to calculate the
 // direction which the entity should be knocked back in.
-func (p *Living) KnockBack(src mgl64.Vec3, force, height float64) {
-	if p.Dead() {
+func (l *Living) KnockBack(src mgl64.Vec3, force, height float64) {
+	if l.Dead() {
 		return
 	}
-	p.knockBack(src, force, height)
+	l.knockBack(src, force, height)
 }
 
 // knockBack is an unexported function that is used to knock the player back. This function does not check if the player
 // can take damage or not.
-func (p *Living) knockBack(src mgl64.Vec3, force, height float64) {
-	velocity := p.Position().Sub(src)
+func (l *Living) knockBack(src mgl64.Vec3, force, height float64) {
+	velocity := l.Position().Sub(src)
 	velocity[1] = 0
 
 	if velocity.Len() != 0 {
@@ -133,56 +135,56 @@ func (p *Living) knockBack(src mgl64.Vec3, force, height float64) {
 	}
 	velocity[1] = height
 
-	p.SetVelocity(velocity.Mul(1))
+	l.SetVelocity(velocity.Mul(1))
 }
 
-func (l Living) Velocity() mgl64.Vec3 {
+func (l *Living) Velocity() mgl64.Vec3 {
 	return l.data.Vel
 }
 
-func (p *Living) SetVelocity(velocity mgl64.Vec3) {
-	p.data.Vel = velocity
-	for _, v := range p.viewers() {
-		v.ViewEntityVelocity(p, velocity)
+func (l *Living) SetVelocity(velocity mgl64.Vec3) {
+	l.data.Vel = velocity
+	for _, v := range l.viewers() {
+		v.ViewEntityVelocity(l, velocity)
 	}
 }
 
-func (l Living) AddEffect(e effect.Effect) {
+func (l *Living) AddEffect(e effect.Effect) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (l Living) RemoveEffect(e effect.Type) {
+func (l *Living) RemoveEffect(e effect.Type) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (l Living) Effects() []effect.Effect {
+func (l *Living) Effects() []effect.Effect {
 	return nil
 }
 
-func (l Living) Speed() float64 {
+func (l *Living) Speed() float64 {
 	return l.speed
 }
 
-func (l Living) SetSpeed(f float64) {
-
+func (l *Living) SetSpeed(f float64) {
+	l.speed = f
 }
 
-func (l Living) Close() error {
+func (l *Living) Close() error {
 	l.tx.RemoveEntity(l)
 	return nil
 }
 
-func (l Living) H() *world.EntityHandle {
+func (l *Living) H() *world.EntityHandle {
 	return l.handle
 }
 
-func (l Living) Position() mgl64.Vec3 {
+func (l *Living) Position() mgl64.Vec3 {
 	return l.data.Pos
 }
 
-func (l Living) Rotation() cube.Rotation {
+func (l *Living) Rotation() cube.Rotation {
 	return l.data.Rot
 }
 
@@ -201,11 +203,11 @@ func (l *Living) EyeHeight() float64 {
 // Move moves the player from one position to another in the world, by adding the delta passed to the current
 // position of the player.
 // Move also rotates the player, adding deltaYaw and deltaPitch to the respective values.
-func (p *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64) {
-	if p.Dead() || (deltaPos.ApproxEqual(mgl64.Vec3{}) && mgl64.FloatEqual(deltaYaw, 0) && mgl64.FloatEqual(deltaPitch, 0)) {
+func (l *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64) {
+	if l.Dead() || (deltaPos.ApproxEqual(mgl64.Vec3{}) && mgl64.FloatEqual(deltaYaw, 0) && mgl64.FloatEqual(deltaPitch, 0)) {
 		return
 	}
-	if p.immobile {
+	if l.immobile {
 		if mgl64.FloatEqual(deltaYaw, 0) && mgl64.FloatEqual(deltaPitch, 0) {
 			// If only the position was changed, don't continue with the movement when immobile.
 			return
@@ -214,60 +216,63 @@ func (p *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64) {
 		deltaPos = mgl64.Vec3{}
 	}
 	var (
-		pos         = p.Position()
-		yaw, pitch  = p.Rotation().Elem()
+		pos         = l.Position()
+		yaw, pitch  = l.Rotation().Elem()
 		res, resRot = pos.Add(deltaPos), cube.Rotation{yaw + deltaYaw, pitch + deltaPitch}
 	)
 
-	for _, v := range p.viewers() {
-		v.ViewEntityMovement(p, res, resRot, p.OnGround())
+	for _, v := range l.viewers() {
+		v.ViewEntityMovement(l, res, resRot, l.OnGround())
 	}
 
-	p.data.Pos = res
-	p.data.Rot = resRot
+	l.data.Pos = res
+	l.data.Rot = resRot
 	if deltaPos.Len() <= 3 {
 		// Only update velocity if the player is not moving too fast to prevent potential OOMs.
-		p.data.Vel = deltaPos
-		p.checkBlockCollisions(deltaPos)
+		l.data.Vel = deltaPos
+		l.checkBlockCollisions(deltaPos)
 	}
 
 	horizontalVel := deltaPos
 	horizontalVel[1] = 0
 
-	p.onGround = p.checkOnGround()
-	p.updateFallState(deltaPos[1])
+	l.onGround = l.checkOnGround()
+	l.updateFallState(deltaPos[1])
 }
 
 // ResetFallDistance resets the player's fall distance.
-func (p *Living) ResetFallDistance() {
-	p.fallDistance = 0
+func (l *Living) ResetFallDistance() {
+	l.fallDistance = 0
 }
 
 // FallDistance returns the player's fall distance.
-func (p *Living) FallDistance() float64 {
-	return p.fallDistance
+func (l *Living) FallDistance() float64 {
+	return l.fallDistance
 }
 
 // OnFireDuration ...
-func (p *Living) OnFireDuration() time.Duration {
-	return time.Duration(p.fireTicks) * time.Second / 20
+func (l *Living) OnFireDuration() time.Duration {
+	return time.Duration(l.fireTicks) * time.Second / 20
 }
 
 // SetOnFire ...
-func (p *Living) SetOnFire(duration time.Duration) {
+func (l *Living) SetOnFire(duration time.Duration) {
 	ticks := int64(duration.Seconds() * 20)
-	p.fireTicks = ticks
-	p.updateState()
+	l.fireTicks = ticks
+	l.updateState()
 }
 
 // Extinguish ...
-func (p *Living) Extinguish() {
-	p.SetOnFire(0)
+func (l *Living) Extinguish() {
+	l.SetOnFire(0)
 }
 
 // Tick ticks the entity, performing actions such as checking if the player is still breaking a block.
 func (l *Living) Tick(_ *world.Tx, current int64) {
-	if l.Dead() {
+	ctx := event.C(l)
+	l.handler.HandleTick(ctx)
+
+	if ctx.Cancelled() || l.Dead() {
 		return
 	}
 
@@ -299,36 +304,36 @@ func (l *Living) Tick(_ *world.Tx, current int64) {
 }
 
 // updateFallState is called to update the entities falling state.
-func (p *Living) updateFallState(distanceThisTick float64) {
-	if p.OnGround() {
-		if p.fallDistance > 0 {
-			p.fall(p.fallDistance)
-			p.ResetFallDistance()
+func (l *Living) updateFallState(distanceThisTick float64) {
+	if l.OnGround() {
+		if l.fallDistance > 0 {
+			l.fall(l.fallDistance)
+			l.ResetFallDistance()
 		}
-	} else if distanceThisTick < p.fallDistance {
-		p.fallDistance -= distanceThisTick
+	} else if distanceThisTick < l.fallDistance {
+		l.fallDistance -= distanceThisTick
 	} else {
-		p.ResetFallDistance()
+		l.ResetFallDistance()
 	}
 }
 
 // fall is called when a falling entity hits the ground.
-func (p *Living) fall(distance float64) {
-	pos := cube.PosFromVec3(p.Position())
-	b := p.tx.Block(pos)
+func (l *Living) fall(distance float64) {
+	pos := cube.PosFromVec3(l.Position())
+	b := l.tx.Block(pos)
 
-	if len(b.Model().BBox(pos, p.tx)) == 0 {
+	if len(b.Model().BBox(pos, l.tx)) == 0 {
 		pos = pos.Sub(cube.Pos{0, 1})
-		b = p.tx.Block(pos)
+		b = l.tx.Block(pos)
 	}
 	if h, ok := b.(block.EntityLander); ok {
-		h.EntityLand(pos, p.tx, p, &distance)
+		h.EntityLand(pos, l.tx, l, &distance)
 	}
 	dmg := distance - 3
 	if dmg < 0.5 {
 		return
 	}
-	p.Hurt(math.Ceil(dmg), entity.FallDamageSource{})
+	l.Hurt(math.Ceil(dmg), entity.FallDamageSource{})
 }
 
 // checkCollisions checks the player's block collisions.
@@ -439,9 +444,9 @@ func (l *Living) viewers() []world.Viewer {
 }
 
 // insideOfSolid returns true if the player is inside a solid block.
-func (p *Living) insideOfSolid() bool {
-	pos := cube.PosFromVec3(entity.EyePosition(p))
-	b, box := p.tx.Block(pos), p.handle.Type().BBox(p).Translate(p.Position())
+func (l *Living) insideOfSolid() bool {
+	pos := cube.PosFromVec3(entity.EyePosition(l))
+	b, box := l.tx.Block(pos), l.handle.Type().BBox(l).Translate(l.Position())
 
 	_, solid := b.Model().(model.Solid)
 	if !solid {
@@ -453,7 +458,7 @@ func (p *Living) insideOfSolid() bool {
 		// Transparent.
 		return false
 	}
-	for _, blockBox := range b.Model().BBox(pos, p.tx) {
+	for _, blockBox := range b.Model().BBox(pos, l.tx) {
 		if blockBox.Translate(pos.Vec3()).IntersectsWith(box) {
 			return true
 		}
@@ -462,8 +467,8 @@ func (p *Living) insideOfSolid() bool {
 }
 
 // updateState updates the state of the player to all viewers of the player.
-func (p *Living) updateState() {
-	for _, v := range p.viewers() {
-		v.ViewEntityState(p)
+func (l *Living) updateState() {
+	for _, v := range l.viewers() {
+		v.ViewEntityState(l)
 	}
 }

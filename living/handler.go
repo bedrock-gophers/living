@@ -3,20 +3,23 @@ package living
 import (
 	"github.com/df-mc/dragonfly/server/event"
 	"github.com/df-mc/dragonfly/server/world"
+	"time"
 )
+
+type Context = event.Context[*Living]
 
 type Handler interface {
 	// HandleTick handles the entity's tick.
-	HandleTick()
+	HandleTick(ctx *Context)
 	// HandleHurt handles the entity being hurt.
-	HandleHurt(ctx *event.Context[world.Entity], damage float64, src world.DamageSource)
+	HandleHurt(ctx *Context, damage float64, immune bool, immunity *time.Duration, src world.DamageSource)
 }
 
 type NopHandler struct{}
 
 var _ Handler = NopHandler{}
 
-func (NopHandler) HandleTick() {}
+func (NopHandler) HandleTick(*Context) {}
 
-func (NopHandler) HandleHurt(*event.Context[world.Entity], float64, world.DamageSource) {
+func (NopHandler) HandleHurt(*Context, float64, bool, *time.Duration, world.DamageSource) {
 }

@@ -7,6 +7,9 @@ import (
 )
 
 type livingData struct {
+	*entity.HealthManager
+
+	drops      []Drop
 	entityType world.EntityType
 
 	mc *entity.MovementComputer
@@ -23,4 +26,6 @@ type livingData struct {
 	immuneUntil time.Time
 	lastDamage  float64
 	speed       float64
+
+	handler Handler
 }
