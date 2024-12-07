@@ -3,11 +3,9 @@ package living
 import (
 	"github.com/df-mc/dragonfly/server/entity"
 	"github.com/df-mc/dragonfly/server/world"
-	"github.com/go-gl/mathgl/mgl64"
 )
 
 type Config struct {
-	Position   mgl64.Vec3
 	EntityType world.EntityType
 }
 
