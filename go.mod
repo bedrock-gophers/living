@@ -1,12 +1,12 @@
 module github.com/bedrock-gophers/living
 
-go 1.22.0
+go 1.23
 
-toolchain go1.23.2
+toolchain go1.23.3
 
 require (
 	github.com/df-mc/atomic v1.10.0
-	github.com/df-mc/dragonfly v0.9.19-0.20241117115802-a2ea5412ae32
+	github.com/df-mc/dragonfly v0.9.20-0.20241204134050-2a95afa6a7fa
 	github.com/go-gl/mathgl v1.1.0
 	github.com/sirupsen/logrus v1.9.3
 )
@@ -21,8 +21,9 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/muhammadmuzzammil1998/jsonc v1.0.0 // indirect
+	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/sandertv/go-raknet v1.14.2 // indirect
-	github.com/sandertv/gophertunnel v1.42.2 // indirect
+	github.com/sandertv/gophertunnel v1.43.0 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	golang.org/x/crypto v0.28.0 // indirect
