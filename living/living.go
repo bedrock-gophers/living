@@ -333,7 +333,7 @@ func (p *Living) fall(distance float64) {
 
 // checkCollisions checks the player's block collisions.
 func (l *Living) checkBlockCollisions(vel mgl64.Vec3) {
-	entityBBox := Type.BBox(l).Translate(l.Position())
+	entityBBox := l.entityType.BBox(l).Translate(l.Position())
 	deltaX, deltaY, deltaZ := vel[0], vel[1], vel[2]
 
 	l.checkEntityInsiders(entityBBox)
@@ -414,7 +414,7 @@ func (l *Living) checkEntityInsiders(entityBBox cube.BBox) {
 
 // checkOnGround checks if the player is currently considered to be on the ground.
 func (l *Living) checkOnGround() bool {
-	box := Type.BBox(l).Translate(l.Position())
+	box := l.entityType.BBox(l).Translate(l.Position())
 	b := box.Grow(1)
 
 	low, high := cube.PosFromVec3(b.Min()), cube.PosFromVec3(b.Max())

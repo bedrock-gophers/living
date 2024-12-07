@@ -2,10 +2,13 @@ package living
 
 import (
 	"github.com/df-mc/dragonfly/server/entity"
+	"github.com/df-mc/dragonfly/server/world"
 	"time"
 )
 
 type livingData struct {
+	entityType world.EntityType
+
 	mc *entity.MovementComputer
 
 	collidedHorizontally bool

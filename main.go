@@ -39,8 +39,10 @@ func accept(p *player.Player) {
 		Position: p.Position(),
 	}
 
-	conf := living.Config{}
-	p.Tx().AddEntity(opts.New(entityTypeEnderman{}, conf))
+	conf := living.Config{
+		EntityType: entityTypeEnderman{},
+	}
+	p.Tx().AddEntity(opts.New(conf.EntityType, conf))
 }
 
 type entityTypeEnderman struct {

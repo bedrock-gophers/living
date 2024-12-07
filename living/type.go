@@ -6,8 +6,6 @@ import (
 	"github.com/df-mc/dragonfly/server/world"
 )
 
-var Type = NopLivingType{}
-
 type NopLivingType struct{}
 
 func (n NopLivingType) Open(tx *world.Tx, handle *world.EntityHandle, data *world.EntityData) world.Entity {
@@ -27,7 +25,7 @@ func (NopLivingType) EncodeEntity() string {
 }
 
 func (NopLivingType) BBox(e world.Entity) cube.BBox {
-	return cube.Box(-0.3, 0, -0.3, 0.3, 2.9, 0.3)
+	return cube.BBox{}
 }
 
 func (NopLivingType) DecodeNBT(m map[string]any, data *world.EntityData) {
