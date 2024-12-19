@@ -200,6 +200,17 @@ func (l *Living) EyeHeight() float64 {
 	return 1.62
 }
 
+func (l *Living) NameTag() string {
+  return l.data.Name
+}
+
+func (l *Living) SetNameTag(s string) {
+  l.data.Name = s
+  for _, v := range l.tx.Viewers(l.Position()) {
+    v.ViewEntityState(l)
+  }
+}
+
 // Move moves the player from one position to another in the world, by adding the delta passed to the current
 // position of the player.
 // Move also rotates the player, adding deltaYaw and deltaPitch to the respective values.
