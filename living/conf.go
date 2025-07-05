@@ -1,15 +1,20 @@
 package living
 
 import (
+	"slices"
+	"time"
+
 	"github.com/df-mc/dragonfly/server/entity"
 	"github.com/df-mc/dragonfly/server/world"
 )
 
 type Config struct {
-	EntityType world.EntityType
-	Handler    Handler
-	Drops      []Drop
-	MaxHealth  float64
+	world.EntityType
+	*entity.MovementComputer
+	Speed, EyeHeight, MaxHealth float64
+	Drops                       []Drop
+	ImmuneDuration              time.Duration
+	Handler
 }
 
 func (c Config) Apply(data *world.EntityData) {
@@ -22,11 +27,14 @@ func (c Config) Apply(data *world.EntityData) {
 	}
 
 	data.Data = &livingData{
-		drops:         c.Drops,
-		entityType:    c.EntityType,
-		HealthManager: entity.NewHealthManager(c.MaxHealth, c.MaxHealth),
-		mc:            &entity.MovementComputer{Gravity: 0.08, Drag: 0.02, DragBeforeGravity: true},
-		speed:         0.1,
-		handler:       c.Handler,
+		entityType:     c.EntityType,
+		mc:             c.MovementComputer,
+		speed:          c.Speed,
+		eyeHeight:      c.EyeHeight,
+		HealthManager:  entity.NewHealthManager(c.MaxHealth, c.MaxHealth),
+		drops:          slices.Values(c.Drops),
+		scale:          1,
+		immuneDuration: c.ImmuneDuration,
+		handler:        c.Handler,
 	}
 }
