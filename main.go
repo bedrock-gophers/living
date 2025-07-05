@@ -5,25 +5,23 @@ import (
 	"github.com/bedrock-gophers/living/living"
 	"github.com/df-mc/dragonfly/server"
 	"github.com/df-mc/dragonfly/server/block/cube"
+	"github.com/df-mc/dragonfly/server/entity"
 	"github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/player/chat"
 	"github.com/df-mc/dragonfly/server/world"
-	"github.com/sirupsen/logrus"
 	"log/slog"
 	"time"
 )
 
 func main() {
-	log := logrus.New()
-	log.Formatter = &logrus.TextFormatter{ForceColors: true}
-	log.Level = logrus.DebugLevel
-
+	log := slog.Default()
 	chat.Global.Subscribe(chat.StdoutSubscriber{})
 
 	conf, err := server.DefaultConfig().Config(slog.Default())
 	if err != nil {
-		log.Fatalln(err)
+		log.Error(err.Error())
+		return
 	}
 
 	srv := conf.New()
@@ -47,6 +45,7 @@ func accept(p *player.Player) {
 		Drops: []living.Drop{
 			living.NewDrop(item.EnderPearl{}, 0, 2),
 		},
+		MovementComputer: &entity.MovementComputer{Gravity: 0.08, Drag: 0.02, DragBeforeGravity: true},
 	}
 	p.Tx().AddEntity(opts.New(conf.EntityType, conf))
 }
@@ -66,6 +65,6 @@ type handler struct {
 	living.NopHandler
 }
 
-func (handler) HandleHurt(ctx *living.Context, damage float64, immune bool, immunity *time.Duration, src world.DamageSource) {
+func (handler) HandleHurt(ctx living.Context, damage float64, immune bool, immunity *time.Duration, src world.DamageSource) {
 	fmt.Println("enderman hurt")
 }

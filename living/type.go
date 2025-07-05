@@ -27,9 +27,9 @@ func (NopLivingType) BBox(e world.Entity) cube.BBox {
 }
 
 func (NopLivingType) DecodeNBT(m map[string]any, data *world.EntityData) {
-
+	data.Data = m
 }
 
 func (NopLivingType) EncodeNBT(data *world.EntityData) map[string]any {
-	return map[string]any{}
+	return map[string]any{"data": data}
 }
