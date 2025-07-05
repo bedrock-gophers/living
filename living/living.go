@@ -50,8 +50,6 @@ func (l *Living) Hurt(dmg float64, src world.DamageSource) (float64, bool) {
 
 	immunity := l.immuneDuration
 	ctx := event.C[*Living](l)
-	l.handler.HandleHurt(*ctx, totalDamage, immune, &immunity, src)
-
 	if l.handler.HandleHurt(*ctx, totalDamage, immune, &immunity, src); ctx.Cancelled() {
 		return 0, false
 	}
@@ -59,6 +57,9 @@ func (l *Living) Hurt(dmg float64, src world.DamageSource) (float64, bool) {
 	l.AddHealth(-damageLeft)
 
 	pos := l.Position()
+	for _, viewer := range l.Viewers(l.tx) {
+		viewer.ViewEntityAction(l, entity.HurtAction{})
+	}
 	if src.Fire() {
 		l.tx.PlaySound(pos, sound.Burning{})
 	} else if _, ok := src.(entity.DrowningDamageSource); ok {
@@ -137,26 +138,32 @@ func (l *Living) knockBack(src mgl64.Vec3, force, height float64) {
 	l.SetVelocity(velocity.Mul(1))
 }
 
+// Tx returns the transaction.
 func (l *Living) Tx() *world.Tx {
 	return l.tx
 }
 
+// Age returns the age of the entity.
 func (l *Living) Age() time.Duration {
 	return l.age
 }
 
+// Speed returns the speed.
 func (l *Living) Speed() float64 {
 	return l.speed
 }
 
+// SetSpeed sets the speed.
 func (l *Living) SetSpeed(f float64) {
 	l.speed = f
 }
 
+// Velocity returns the velocity.
 func (l *Living) Velocity() mgl64.Vec3 {
 	return l.data.Vel
 }
 
+// SetVelocity sets the velocity.
 func (l *Living) SetVelocity(velocity mgl64.Vec3) {
 	l.data.Vel = velocity
 	for _, v := range l.Viewers(l.tx) {
@@ -164,51 +171,63 @@ func (l *Living) SetVelocity(velocity mgl64.Vec3) {
 	}
 }
 
+// Drops returns the drops.
 func (l *Living) Drops() iter.Seq[Drop] {
 	return l.drops
 }
 
+// AddEffect adds an effect to the entity.
 func (l *Living) AddEffect(e effect.Effect) {
 	l.effects[e.Type()] = e
 }
 
+// RemoveEffect removes the effect of an entity.
 func (l *Living) RemoveEffect(e effect.Type) {
 	delete(l.effects, e)
 }
 
+// Effects returns the effects of an entity.
 func (l *Living) Effects() []effect.Effect {
 	return slices.Collect(maps.Values(l.effects))
 }
 
+// Close closes the entity.
 func (l *Living) Close() error {
 	l.tx.RemoveEntity(l)
 	return nil
 }
 
+// H returns the EntityHandle.
 func (l *Living) H() *world.EntityHandle {
 	return l.handle
 }
 
+// Position returns the position.
 func (l *Living) Position() mgl64.Vec3 {
 	return l.data.Pos
 }
 
+// Rotation returns the rotation.
 func (l *Living) Rotation() cube.Rotation {
 	return l.data.Rot
 }
 
+// Dead returns if the entity is dead or not.
 func (l *Living) Dead() bool {
 	return l.Health() <= mgl64.Epsilon
 }
 
+// OnGround returns if the entity is on the ground.
 func (l *Living) OnGround() bool {
 	return l.onGround
 }
 
+// Immobile returns if the entity is Immobile.
 func (l *Living) Immobile() bool {
 	return l.immobile
 }
 
+// SetImmobile sets if the entity is immobile or not.
 func (l *Living) SetImmobile(immobile bool, tx *world.Tx) {
 	l.immobile = immobile
 	for _, v := range l.Viewers(tx) {
@@ -216,10 +235,12 @@ func (l *Living) SetImmobile(immobile bool, tx *world.Tx) {
 	}
 }
 
+// Invisible ...
 func (l *Living) Invisible() bool {
 	return l.invisible
 }
 
+// SetInvisible ...
 func (l *Living) SetInvisible(invisible bool, tx *world.Tx) {
 	l.invisible = invisible
 	for _, v := range l.Viewers(tx) {
@@ -227,10 +248,12 @@ func (l *Living) SetInvisible(invisible bool, tx *world.Tx) {
 	}
 }
 
+// Scale ...
 func (l *Living) Scale() float64 {
 	return l.scale
 }
 
+// SetScale ...
 func (l *Living) SetScale(scale float64, tx *world.Tx) {
 	l.scale = scale
 	for _, v := range l.Viewers(tx) {
@@ -238,14 +261,17 @@ func (l *Living) SetScale(scale float64, tx *world.Tx) {
 	}
 }
 
+// EyeHeight ...
 func (l *Living) EyeHeight() float64 {
 	return l.livingData.EyeHeight
 }
 
+// NameTag ...
 func (l *Living) NameTag() string {
 	return l.data.Name
 }
 
+// SetNameTag ...
 func (l *Living) SetNameTag(s string, tx *world.Tx) {
 	l.data.Name = s
 	for _, v := range l.Viewers(tx) {
@@ -329,6 +355,7 @@ func (l *Living) MoveToTarget(target mgl64.Vec3, jumpVelocity float64, tx *world
 	l.Move(delta, 0, 0, tx)
 }
 
+// LookAt ...
 func (l *Living) LookAt(v mgl64.Vec3, tx *world.Tx) {
 	yaw, pitch := LookAtExtended(l.Position().Add(mgl64.Vec3{0, l.EyeHeight(), 0}), v)
 	dy := yaw - l.Rotation().Yaw()
@@ -337,6 +364,7 @@ func (l *Living) LookAt(v mgl64.Vec3, tx *world.Tx) {
 	l.Move(mgl64.Vec3{0, 0, 0}, dy, dp, tx)
 }
 
+// LookAwayFrom ...
 func (l *Living) LookAwayFrom(v mgl64.Vec3, tx *world.Tx) {
 	yaw, pitch := LookAtExtended(l.Position().Add(mgl64.Vec3{0, l.EyeHeight(), 0}), v)
 	dy := int(math.Round(yaw - l.Rotation().Yaw()))
@@ -350,6 +378,7 @@ func (l *Living) LookAwayFrom(v mgl64.Vec3, tx *world.Tx) {
 	l.Move(mgl64.Vec3{0, 0, 0}, float64(dy), -dp, tx)
 }
 
+// LookAtExtended ...
 func LookAtExtended(pos mgl64.Vec3, v mgl64.Vec3) (yaw float64, pitch float64) {
 	vt := v.Y() - pos.Y()
 	hz := math.Sqrt(math.Pow(v.X()-pos.X(), 2) + math.Pow(v.Z()-pos.Z(), 2))
@@ -610,6 +639,7 @@ func (l *Living) checkOnGround(tx *world.Tx) bool {
 	return false
 }
 
+// Viewers returns the viewers.
 func (l *Living) Viewers(tx *world.Tx) []world.Viewer {
 	return tx.Viewers(l.data.Pos)
 }
