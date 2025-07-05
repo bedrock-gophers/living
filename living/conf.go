@@ -30,7 +30,7 @@ func (c Config) Apply(data *world.EntityData) {
 		entityType:     c.EntityType,
 		mc:             c.MovementComputer,
 		speed:          c.Speed,
-		EyeHeight:      c.EyeHeight,
+		eyeHeight:      c.EyeHeight,
 		HealthManager:  entity.NewHealthManager(c.MaxHealth, c.MaxHealth),
 		drops:          slices.Values(c.Drops),
 		scale:          1,

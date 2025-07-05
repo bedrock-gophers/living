@@ -263,7 +263,7 @@ func (l *Living) SetScale(scale float64, tx *world.Tx) {
 
 // EyeHeight ...
 func (l *Living) EyeHeight() float64 {
-	return l.livingData.EyeHeight
+	return l.livingData.eyeHeight
 }
 
 // NameTag ...

@@ -14,7 +14,7 @@ type livingData struct {
 	age       time.Duration
 	mc        *entity.MovementComputer
 	speed     float64
-	EyeHeight float64
+	eyeHeight float64
 	*entity.HealthManager
 
 	drops iter.Seq[Drop]
