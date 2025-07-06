@@ -318,41 +318,53 @@ func (l *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64, tx *wor
 
 // MoveToTarget Target is assumed to be another Entity or similar struct with position getters.
 func (l *Living) MoveToTarget(target mgl64.Vec3, jumpVelocity float64, tx *world.Tx) {
-	norm := target.Sub(l.Position()).Normalize()
-	delta := norm.Mul(l.Speed())
-	pos := cube.PosFromVec3(l.Position().Add(
-		norm.Mul(l.H().Type().BBox(l).Width()),
-	))
-	b := tx.Block(pos)
-	box := b.Model().BBox(cube.Pos{}, tx)
+	if l.Dead() {
+		return
+	}
 
-	for _, b := range box {
-		b = b.Translate(pos.Vec3Middle())
+	delta := target.Sub(l.Position())
+	delta[1] = 0
+	if delta.Len() == 0 {
+		return
+	}
+	dir := delta.Normalize()
+	baseMove := dir.Mul(l.Speed())
 
-		magnitude := b.Max()[1] - l.Position()[1]
-		if magnitude <= 0.5 && magnitude > 0 {
-			delta[1] = magnitude
+	checkOffset := dir.Mul(l.H().Type().BBox(l).Width())
+	checkPos := cube.PosFromVec3(l.Position().Add(checkOffset))
+	low := tx.Block(checkPos)
+	high := tx.Block(checkPos.Add(cube.Pos{0, 1, 0}))
 
-			vel := l.Velocity()
-			l.Move(delta, 0, 0, tx)
-			l.SetVelocity(vel)
-			return
+	_, solidLow := low.Model().(model.Solid)
+	_, solidHigh := high.Model().(model.Solid)
+
+	move := baseMove
+
+	if solidLow {
+		maxY := 0.0
+		for _, box := range low.Model().BBox(cube.Pos{}, tx) {
+			if h := box.Max()[1]; h > maxY {
+				maxY = h
+			}
+		}
+
+		if !solidHigh {
+			move[1] = jumpVelocity
+			if l.OnGround() {
+				move[0] *= 0.30
+				move[2] *= 0.30
+			}
+		} else {
+			move[0], move[2] = 0, 0
 		}
 	}
 
-	_, solid := b.Model().(model.Solid)
-	_, water := b.(block.Water)
-
-	if water || solid {
-		delta[1] = jumpVelocity
+	if !l.OnGround() && move[1] == 0 {
+		move[0] *= 0.25
+		move[2] *= 0.25
 	}
 
-	if !l.OnGround() {
-		delta[0] *= 0.25
-		delta[2] *= 0.25
-	}
-
-	l.Move(delta, 0, 0, tx)
+	l.Move(move, 0, 0, tx)
 }
 
 // LookAt ...
