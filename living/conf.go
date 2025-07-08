@@ -35,6 +35,7 @@ func (c Config) Apply(data *world.EntityData) {
 		drops:          slices.Values(c.Drops),
 		scale:          1,
 		immuneDuration: c.ImmuneDuration,
+		effects:        make(map[effect.Type]effect.Effect),
 		handler:        c.Handler,
 	}
 }
