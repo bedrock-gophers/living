@@ -499,6 +499,9 @@ func (l *Living) Variant() int32 {
 // WithVariant ...
 func (l *Living) WithVariant(v int32) {
 	l.variant = v
+	for _, v := range l.Viewers(l.Tx()) {
+		v.ViewEntityState(l)
+	}
 }
 
 // MarkVariant ...
@@ -507,9 +510,9 @@ func (l *Living) MarkVariant() int32 {
 }
 
 // WithMarkVariant ...
-func (l *Living) WithMarkVariant(v int32, tx *world.Tx) {
+func (l *Living) WithMarkVariant(v int32) {
 	l.markVariant = v
-	for _, v := range l.Viewers(tx) {
+	for _, v := range l.Viewers(l.Tx()) {
 		v.ViewEntityState(l)
 	}
 }
