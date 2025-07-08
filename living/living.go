@@ -339,7 +339,6 @@ func (l *Living) MoveToTarget(target mgl64.Vec3, jumpVelocity float64, tx *world
 	_, solidHigh := high.Model().(model.Solid)
 
 	move := baseMove
-
 	if solidLow {
 		maxY := 0.0
 		for _, box := range low.Model().BBox(cube.Pos{}, tx) {
@@ -349,10 +348,10 @@ func (l *Living) MoveToTarget(target mgl64.Vec3, jumpVelocity float64, tx *world
 		}
 
 		if !solidHigh {
-			move[1] = jumpVelocity
+			move[1] = min(maxY, jumpVelocity)
 			if l.OnGround() {
-				move[0] *= 0.30
-				move[2] *= 0.30
+				move[0] *= 0.50
+				move[2] *= 0.50
 			}
 		} else {
 			move[0], move[2] = 0, 0
