@@ -297,8 +297,19 @@ func (l *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64, tx *wor
 	var (
 		pos         = l.Position()
 		yaw, pitch  = l.Rotation().Elem()
-		res, resRot = pos.Add(deltaPos), cube.Rotation{yaw + deltaYaw, pitch + deltaPitch}
+		resRot = cube.Rotation{yaw + deltaYaw, pitch + deltaPitch}
 	)
+
+	// Check collisions BEFORE updating position
+	originalDelta := deltaPos
+	if deltaPos.Len() <= 3 {
+		// Apply collision detection to modify deltaPos
+		deltaPos = l.calculateCollisionAdjustedMovement(deltaPos, tx)
+		l.data.Vel = originalDelta
+	}
+
+	// Now calculate final position with collision-adjusted deltaPos
+	res := pos.Add(deltaPos)
 
 	for _, v := range l.Viewers(tx) {
 		v.ViewEntityMovement(l, res, resRot, l.OnGround())
@@ -306,14 +317,9 @@ func (l *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64, tx *wor
 
 	l.data.Pos = res
 	l.data.Rot = resRot
-	if deltaPos.Len() <= 3 {
-		// Only update velocity if the player is not moving too fast to prevent potential OOMs.
-		l.data.Vel = deltaPos
-		l.checkBlockCollisions(deltaPos, tx)
-	}
 
 	l.onGround = l.checkOnGround(tx)
-	//l.updateFallState(deltaPos[1], tx)
+	l.updateFallState(deltaPos[1], tx)
 }
 
 // MoveToTarget Target is assumed to be another Entity or similar struct with position getters.
@@ -467,9 +473,6 @@ func (l *Living) Tick(tx *world.Tx, current int64) {
 		return
 	}
 
-	l.checkBlockCollisions(l.data.Vel, tx)
-	l.onGround = l.checkOnGround(tx)
-
 	if l.Position()[1] < float64(tx.Range()[0]) && current%10 == 0 {
 		l.Hurt(4, entity.VoidDamageSource{})
 	}
@@ -483,6 +486,8 @@ func (l *Living) Tick(tx *world.Tx, current int64) {
 			l.Hurt(1, block.FireDamageSource{})
 		}
 	}
+
+	l.onGround = l.checkOnGround(tx)
 
 	m := l.mc.TickMovement(l, l.Position(), l.Velocity(), l.Rotation(), tx)
 	m.Send()
@@ -524,9 +529,9 @@ func (l *Living) updateFallState(distanceThisTick float64, tx *world.Tx) {
 			l.fall(l.fallDistance, tx)
 			l.ResetFallDistance()
 		}
-	} else if distanceThisTick < l.fallDistance {
-		l.fallDistance -= distanceThisTick
-	} else {
+	} else if distanceThisTick < 0 {
+		l.fallDistance += -distanceThisTick
+	} else if l.fallDistance > 0 {
 		l.ResetFallDistance()
 	}
 }
@@ -550,20 +555,21 @@ func (l *Living) fall(distance float64, tx *world.Tx) {
 	l.Hurt(math.Ceil(dmg), entity.FallDamageSource{})
 }
 
-// checkCollisions checks the player's block collisions.
-func (l *Living) checkBlockCollisions(vel mgl64.Vec3, tx *world.Tx) {
+// calculateCollisionAdjustedMovement calculates movement with collision adjustments and returns the adjusted deltaPos
+func (l *Living) calculateCollisionAdjustedMovement(vel mgl64.Vec3, tx *world.Tx) mgl64.Vec3 {
 	entityBBox := l.entityType.BBox(l).Translate(l.Position())
 	deltaX, deltaY, deltaZ := vel[0], vel[1], vel[2]
 
 	l.checkEntityInsiders(entityBBox, tx)
 
-	grown := entityBBox.Extend(vel).Grow(0.25)
+	// Extend the bounding box by the movement vector to get collision area
+	grown := entityBBox.Extend(vel).Grow(0.001)
 	low, high := grown.Min(), grown.Max()
 	minX, minY, minZ := int(math.Floor(low[0])), int(math.Floor(low[1])), int(math.Floor(low[2]))
 	maxX, maxY, maxZ := int(math.Ceil(high[0])), int(math.Ceil(high[1])), int(math.Ceil(high[2]))
 
-	// A prediction of one BBox per block, plus an additional 2, in case
-	blocks := make([]cube.BBox, 0, (maxX-minX)*(maxY-minY)*(maxZ-minZ)+2)
+	// Collect all collision boxes in the movement area
+	blocks := make([]cube.BBox, 0, (maxX-minX+1)*(maxY-minY+1)*(maxZ-minZ+1))
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
 			for z := minZ; z <= maxZ; z++ {
@@ -576,32 +582,47 @@ func (l *Living) checkBlockCollisions(vel mgl64.Vec3, tx *world.Tx) {
 		}
 	}
 
-	// epsilon is the epsilon used for thresholds for change used for change in position and velocity.
+	// Apply collision detection in proper order: Y first, then X, then Z
 	const epsilon = 0.001
 
+	// Y-axis collision (vertical movement)
 	if !mgl64.FloatEqualThreshold(deltaY, 0, epsilon) {
-		// First we move the entity BBox on the Y axis.
 		for _, blockBBox := range blocks {
-			deltaY = entityBBox.YOffset(blockBBox, deltaY)
+			newDeltaY := entityBBox.YOffset(blockBBox, deltaY)
+			if newDeltaY != deltaY {
+				deltaY = newDeltaY
+			}
 		}
-		entityBBox = entityBBox.Translate(mgl64.Vec3{0, deltaY})
+		entityBBox = entityBBox.Translate(mgl64.Vec3{0, deltaY, 0})
 	}
+	
+	// X-axis collision (horizontal movement)
 	if !mgl64.FloatEqualThreshold(deltaX, 0, epsilon) {
-		// Then on the X axis.
 		for _, blockBBox := range blocks {
-			deltaX = entityBBox.XOffset(blockBBox, deltaX)
+			newDeltaX := entityBBox.XOffset(blockBBox, deltaX)
+			if newDeltaX != deltaX {
+				deltaX = newDeltaX
+			}
 		}
-		entityBBox = entityBBox.Translate(mgl64.Vec3{deltaX})
+		entityBBox = entityBBox.Translate(mgl64.Vec3{deltaX, 0, 0})
 	}
+	
+	// Z-axis collision (horizontal movement)
 	if !mgl64.FloatEqualThreshold(deltaZ, 0, epsilon) {
-		// And finally on the Z axis.
 		for _, blockBBox := range blocks {
-			deltaZ = entityBBox.ZOffset(blockBBox, deltaZ)
+			newDeltaZ := entityBBox.ZOffset(blockBBox, deltaZ)
+			if newDeltaZ != deltaZ {
+				deltaZ = newDeltaZ
+			}
 		}
 	}
 
-	l.collidedHorizontally = !mgl64.FloatEqual(deltaX, vel[0]) || !mgl64.FloatEqual(deltaZ, vel[2])
-	l.collidedVertically = !mgl64.FloatEqual(deltaY, vel[1])
+	// Update collision flags
+	l.collidedHorizontally = !mgl64.FloatEqualThreshold(deltaX, vel[0], epsilon) || 
+	                         !mgl64.FloatEqualThreshold(deltaZ, vel[2], epsilon)
+	l.collidedVertically = !mgl64.FloatEqualThreshold(deltaY, vel[1], epsilon)
+	
+	return mgl64.Vec3{deltaX, deltaY, deltaZ}
 }
 
 // checkEntityInsiders checks if the player is colliding with any EntityInsider blocks.
@@ -634,17 +655,27 @@ func (l *Living) checkEntityInsiders(entityBBox cube.BBox, tx *world.Tx) {
 // checkOnGround checks if the player is currently considered to be on the ground.
 func (l *Living) checkOnGround(tx *world.Tx) bool {
 	box := l.entityType.BBox(l).Translate(l.Position())
-	b := box.Grow(1)
+	
+	// Create a small area below the entity to check for ground
+	groundCheck := cube.Box(
+		box.Min()[0] - 0.001, box.Min()[1] - 0.001, box.Min()[2] - 0.001,
+		box.Max()[0] + 0.001, box.Min()[1] + 0.001, box.Max()[2] + 0.001,
+	)
 
-	low, high := cube.PosFromVec3(b.Min()), cube.PosFromVec3(b.Max())
+	low, high := cube.PosFromVec3(groundCheck.Min()), cube.PosFromVec3(groundCheck.Max())
 	for x := low[0]; x <= high[0]; x++ {
 		for z := low[2]; z <= high[2]; z++ {
-			for y := low[1]; y < high[1]; y++ {
+			for y := low[1]; y <= high[1]; y++ {
 				pos := cube.Pos{x, y, z}
 				boxList := tx.Block(pos).Model().BBox(pos, tx)
 				for _, bb := range boxList {
-					if bb.GrowVec3(mgl64.Vec3{0, 0.05}).Translate(pos.Vec3()).IntersectsWith(box) {
-						return true
+					blockBox := bb.Translate(pos.Vec3())
+					if blockBox.IntersectsWith(groundCheck) {
+						// Check if block surface is at the right height
+						if blockBox.Max()[1] >= box.Min()[1] - 0.001 && 
+						   blockBox.Max()[1] <= box.Min()[1] + 0.001 {
+							return true
+						}
 					}
 				}
 			}
