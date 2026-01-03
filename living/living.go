@@ -57,7 +57,7 @@ func (l *Living) Hurt(dmg float64, src world.DamageSource) (float64, bool) {
 	l.AddHealth(-damageLeft)
 
 	pos := l.Position()
-	for _, viewer := range l.Viewers(l.tx) {
+	for _, viewer := range l.Viewers() {
 		viewer.ViewEntityAction(l, entity.HurtAction{})
 	}
 	if src.Fire() {
@@ -73,12 +73,12 @@ func (l *Living) Hurt(dmg float64, src world.DamageSource) (float64, bool) {
 }
 
 func (l *Living) Kill(_ world.DamageSource) {
-	for _, viewer := range l.Viewers(l.tx) {
+	for _, viewer := range l.Viewers() {
 		viewer.ViewEntityAction(l, entity.DeathAction{})
 	}
 
 	l.AddHealth(-l.MaxHealth())
-	l.DropItems(l.tx)
+	l.DropItems()
 
 	// Wait a little before removing the entity. The client displays a death
 	// animation while the player is dying.
@@ -93,7 +93,7 @@ func finishDying(_ *world.Tx, e world.Entity) {
 	_ = p.Close()
 }
 
-func (l *Living) DropItems(tx *world.Tx) {
+func (l *Living) DropItems() {
 	pos := l.Position()
 	for d := range l.drops {
 		it := d.Stack()
@@ -104,7 +104,7 @@ func (l *Living) DropItems(tx *world.Tx) {
 			continue
 		}
 		opts := world.EntitySpawnOpts{Position: pos}
-		tx.AddEntity(entity.NewItem(opts, it))
+		l.tx.AddEntity(entity.NewItem(opts, it))
 	}
 }
 
@@ -166,7 +166,7 @@ func (l *Living) Velocity() mgl64.Vec3 {
 // SetVelocity sets the velocity.
 func (l *Living) SetVelocity(velocity mgl64.Vec3) {
 	l.data.Vel = velocity
-	for _, v := range l.Viewers(l.tx) {
+	for _, v := range l.Viewers() {
 		v.ViewEntityVelocity(l, velocity)
 	}
 }
@@ -212,17 +212,6 @@ func (l *Living) Rotation() cube.Rotation {
 	return l.data.Rot
 }
 
-
-// SetRotation sets the rotation.
-func (l *Living) SetRotation(yaw, pitch float64) {
-	currentRotation := l.Rotation()
-
-	deltaYaw := yaw - currentRotation.Yaw()
-	deltaPitch := pitch - currentRotation.Pitch()
-
-	l.Move(mgl64.Vec3{}, deltaYaw, deltaPitch, l.tx)
-}
-
 // Dead returns if the entity is dead or not.
 func (l *Living) Dead() bool {
 	return l.Health() <= mgl64.Epsilon
@@ -238,12 +227,22 @@ func (l *Living) Immobile() bool {
 	return l.immobile
 }
 
-// SetImmobile sets if the entity is immobile or not.
-func (l *Living) SetImmobile(immobile bool, tx *world.Tx) {
-	l.immobile = immobile
-	for _, v := range l.Viewers(tx) {
-		v.ViewEntityState(l)
+// SetImmobile prevents the living from moving around, but still allows them to look around.
+func (l *Living) SetImmobile() {
+	if l.immobile {
+		return
 	}
+	l.immobile = true
+	l.updateState()
+}
+
+// SetMobile allows the living to freely move around again after being immobile.
+func (l *Living) SetMobile() {
+	if !l.Immobile() {
+		return
+	}
+	l.immobile = false
+	l.updateState()
 }
 
 // Invisible ...
@@ -252,11 +251,9 @@ func (l *Living) Invisible() bool {
 }
 
 // SetInvisible ...
-func (l *Living) SetInvisible(invisible bool, tx *world.Tx) {
+func (l *Living) SetInvisible(invisible bool) {
 	l.invisible = invisible
-	for _, v := range l.Viewers(tx) {
-		v.ViewEntityState(l)
-	}
+	l.updateState()
 }
 
 // Scale ...
@@ -265,11 +262,9 @@ func (l *Living) Scale() float64 {
 }
 
 // SetScale ...
-func (l *Living) SetScale(scale float64, tx *world.Tx) {
+func (l *Living) SetScale(scale float64) {
 	l.scale = scale
-	for _, v := range l.Viewers(tx) {
-		v.ViewEntityState(l)
-	}
+	l.updateState()
 }
 
 // EyeHeight ...
@@ -283,17 +278,15 @@ func (l *Living) NameTag() string {
 }
 
 // SetNameTag ...
-func (l *Living) SetNameTag(s string, tx *world.Tx) {
+func (l *Living) SetNameTag(s string) {
 	l.data.Name = s
-	for _, v := range l.Viewers(tx) {
-		v.ViewEntityState(l)
-	}
+	l.updateState()
 }
 
 // Move moves the player from one position to another in the world, by adding the delta passed to the current
 // position of the player.
 // Move also rotates the player, adding deltaYaw and deltaPitch to the respective values.
-func (l *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64, tx *world.Tx) {
+func (l *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64) {
 	if l.Dead() || (deltaPos.ApproxEqual(mgl64.Vec3{}) && mgl64.FloatEqual(deltaYaw, 0) && mgl64.FloatEqual(deltaPitch, 0)) {
 		return
 	}
@@ -306,35 +299,35 @@ func (l *Living) Move(deltaPos mgl64.Vec3, deltaYaw, deltaPitch float64, tx *wor
 		deltaPos = mgl64.Vec3{}
 	}
 	var (
-		pos         = l.Position()
-		yaw, pitch  = l.Rotation().Elem()
-		resRot = cube.Rotation{yaw + deltaYaw, pitch + deltaPitch}
+		pos        = l.Position()
+		yaw, pitch = l.Rotation().Elem()
+		resRot     = cube.Rotation{yaw + deltaYaw, pitch + deltaPitch}
 	)
 
 	// Check collisions BEFORE updating position
 	originalDelta := deltaPos
 	if deltaPos.Len() <= 3 {
 		// Apply collision detection to modify deltaPos
-		deltaPos = l.calculateCollisionAdjustedMovement(deltaPos, tx)
+		deltaPos = l.calculateCollisionAdjustedMovement(deltaPos)
 		l.data.Vel = originalDelta
 	}
 
 	// Now calculate final position with collision-adjusted deltaPos
 	res := pos.Add(deltaPos)
 
-	for _, v := range l.Viewers(tx) {
+	for _, v := range l.Viewers() {
 		v.ViewEntityMovement(l, res, resRot, l.OnGround())
 	}
 
 	l.data.Pos = res
 	l.data.Rot = resRot
 
-	l.onGround = l.checkOnGround(tx)
-	l.updateFallState(deltaPos[1], tx)
+	l.onGround = l.checkOnGround()
+	l.updateFallState(deltaPos[1])
 }
 
 // MoveToTarget Target is assumed to be another Entity or similar struct with position getters.
-func (l *Living) MoveToTarget(target mgl64.Vec3, jumpVelocity float64, tx *world.Tx) {
+func (l *Living) MoveToTarget(target mgl64.Vec3, jumpVelocity float64) {
 	if l.Dead() {
 		return
 	}
@@ -349,8 +342,8 @@ func (l *Living) MoveToTarget(target mgl64.Vec3, jumpVelocity float64, tx *world
 
 	checkOffset := dir.Mul(l.H().Type().BBox(l).Width())
 	checkPos := cube.PosFromVec3(l.Position().Add(checkOffset))
-	low := tx.Block(checkPos)
-	high := tx.Block(checkPos.Add(cube.Pos{0, 1, 0}))
+	low := l.tx.Block(checkPos)
+	high := l.tx.Block(checkPos.Add(cube.Pos{0, 1, 0}))
 
 	_, solidLow := low.Model().(model.Solid)
 	_, solidHigh := high.Model().(model.Solid)
@@ -358,7 +351,7 @@ func (l *Living) MoveToTarget(target mgl64.Vec3, jumpVelocity float64, tx *world
 	move := baseMove
 	if solidLow {
 		maxY := 0.0
-		for _, box := range low.Model().BBox(cube.Pos{}, tx) {
+		for _, box := range low.Model().BBox(cube.Pos{}, l.tx) {
 			if h := box.Max()[1]; h > maxY {
 				maxY = h
 			}
@@ -380,20 +373,20 @@ func (l *Living) MoveToTarget(target mgl64.Vec3, jumpVelocity float64, tx *world
 		move[2] *= 0.25
 	}
 
-	l.Move(move, 0, 0, tx)
+	l.Move(move, 0, 0)
 }
 
 // LookAt ...
-func (l *Living) LookAt(v mgl64.Vec3, tx *world.Tx) {
+func (l *Living) LookAt(v mgl64.Vec3) {
 	yaw, pitch := LookAtExtended(l.Position().Add(mgl64.Vec3{0, l.EyeHeight(), 0}), v)
 	dy := yaw - l.Rotation().Yaw()
 	dp := pitch - l.Rotation().Pitch()
 
-	l.Move(mgl64.Vec3{0, 0, 0}, dy, dp, tx)
+	l.Move(mgl64.Vec3{0, 0, 0}, dy, dp)
 }
 
 // LookAwayFrom ...
-func (l *Living) LookAwayFrom(v mgl64.Vec3, tx *world.Tx) {
+func (l *Living) LookAwayFrom(v mgl64.Vec3) {
 	yaw, pitch := LookAtExtended(l.Position().Add(mgl64.Vec3{0, l.EyeHeight(), 0}), v)
 	dy := int(math.Round(yaw - l.Rotation().Yaw()))
 	dp := pitch - l.Rotation().Pitch()
@@ -403,7 +396,7 @@ func (l *Living) LookAwayFrom(v mgl64.Vec3, tx *world.Tx) {
 		dy -= 360
 	}
 
-	l.Move(mgl64.Vec3{0, 0, 0}, float64(dy), -dp, tx)
+	l.Move(mgl64.Vec3{0, 0, 0}, float64(dy), -dp)
 }
 
 // LookAtExtended ...
@@ -498,13 +491,13 @@ func (l *Living) Tick(tx *world.Tx, current int64) {
 		}
 	}
 
-	l.onGround = l.checkOnGround(tx)
+	l.onGround = l.checkOnGround()
 
 	m := l.mc.TickMovement(l, l.Position(), l.Velocity(), l.Rotation(), tx)
 	m.Send()
 
 	l.data.Vel = m.Velocity()
-	l.Move(m.Position().Sub(l.Position()), 0, 0, tx)
+	l.Move(m.Position().Sub(l.Position()), 0, 0)
 }
 
 // Variant ...
@@ -515,9 +508,7 @@ func (l *Living) Variant() int32 {
 // WithVariant ...
 func (l *Living) WithVariant(v int32) {
 	l.variant = v
-	for _, v := range l.Viewers(l.Tx()) {
-		v.ViewEntityState(l)
-	}
+	l.updateState()
 }
 
 // MarkVariant ...
@@ -528,16 +519,14 @@ func (l *Living) MarkVariant() int32 {
 // WithMarkVariant ...
 func (l *Living) WithMarkVariant(v int32) {
 	l.markVariant = v
-	for _, v := range l.Viewers(l.Tx()) {
-		v.ViewEntityState(l)
-	}
+	l.updateState()
 }
 
 // updateFallState is called to update the entities falling state.
-func (l *Living) updateFallState(distanceThisTick float64, tx *world.Tx) {
+func (l *Living) updateFallState(distanceThisTick float64) {
 	if l.OnGround() {
 		if l.fallDistance > 0 {
-			l.fall(l.fallDistance, tx)
+			l.fall(l.fallDistance)
 			l.ResetFallDistance()
 		}
 	} else if distanceThisTick < 0 {
@@ -548,16 +537,16 @@ func (l *Living) updateFallState(distanceThisTick float64, tx *world.Tx) {
 }
 
 // fall is called when a falling entity hits the ground.
-func (l *Living) fall(distance float64, tx *world.Tx) {
+func (l *Living) fall(distance float64) {
 	pos := cube.PosFromVec3(l.Position())
-	b := tx.Block(pos)
+	b := l.tx.Block(pos)
 
-	if len(b.Model().BBox(pos, tx)) == 0 {
+	if len(b.Model().BBox(pos, l.tx)) == 0 {
 		pos = pos.Sub(cube.Pos{0, 1})
-		b = tx.Block(pos)
+		b = l.tx.Block(pos)
 	}
 	if h, ok := b.(block.EntityLander); ok {
-		h.EntityLand(pos, tx, l, &distance)
+		h.EntityLand(pos, l.tx, l, &distance)
 	}
 	dmg := distance - 3
 	if dmg < 0.5 {
@@ -567,11 +556,11 @@ func (l *Living) fall(distance float64, tx *world.Tx) {
 }
 
 // calculateCollisionAdjustedMovement calculates movement with collision adjustments and returns the adjusted deltaPos
-func (l *Living) calculateCollisionAdjustedMovement(vel mgl64.Vec3, tx *world.Tx) mgl64.Vec3 {
+func (l *Living) calculateCollisionAdjustedMovement(vel mgl64.Vec3) mgl64.Vec3 {
 	entityBBox := l.entityType.BBox(l).Translate(l.Position())
 	deltaX, deltaY, deltaZ := vel[0], vel[1], vel[2]
 
-	l.checkEntityInsiders(entityBBox, tx)
+	l.checkEntityInsiders(entityBBox)
 
 	// Extend the bounding box by the movement vector to get collision area
 	grown := entityBBox.Extend(vel).Grow(0.001)
@@ -585,7 +574,7 @@ func (l *Living) calculateCollisionAdjustedMovement(vel mgl64.Vec3, tx *world.Tx
 		for x := minX; x <= maxX; x++ {
 			for z := minZ; z <= maxZ; z++ {
 				pos := cube.Pos{x, y, z}
-				boxes := tx.Block(pos).Model().BBox(pos, tx)
+				boxes := l.tx.Block(pos).Model().BBox(pos, l.tx)
 				for _, box := range boxes {
 					blocks = append(blocks, box.Translate(pos.Vec3()))
 				}
@@ -606,7 +595,7 @@ func (l *Living) calculateCollisionAdjustedMovement(vel mgl64.Vec3, tx *world.Tx
 		}
 		entityBBox = entityBBox.Translate(mgl64.Vec3{0, deltaY, 0})
 	}
-	
+
 	// X-axis collision (horizontal movement)
 	if !mgl64.FloatEqualThreshold(deltaX, 0, epsilon) {
 		for _, blockBBox := range blocks {
@@ -617,7 +606,7 @@ func (l *Living) calculateCollisionAdjustedMovement(vel mgl64.Vec3, tx *world.Tx
 		}
 		entityBBox = entityBBox.Translate(mgl64.Vec3{deltaX, 0, 0})
 	}
-	
+
 	// Z-axis collision (horizontal movement)
 	if !mgl64.FloatEqualThreshold(deltaZ, 0, epsilon) {
 		for _, blockBBox := range blocks {
@@ -629,15 +618,15 @@ func (l *Living) calculateCollisionAdjustedMovement(vel mgl64.Vec3, tx *world.Tx
 	}
 
 	// Update collision flags
-	l.collidedHorizontally = !mgl64.FloatEqualThreshold(deltaX, vel[0], epsilon) || 
-	                         !mgl64.FloatEqualThreshold(deltaZ, vel[2], epsilon)
+	l.collidedHorizontally = !mgl64.FloatEqualThreshold(deltaX, vel[0], epsilon) ||
+		!mgl64.FloatEqualThreshold(deltaZ, vel[2], epsilon)
 	l.collidedVertically = !mgl64.FloatEqualThreshold(deltaY, vel[1], epsilon)
-	
+
 	return mgl64.Vec3{deltaX, deltaY, deltaZ}
 }
 
 // checkEntityInsiders checks if the player is colliding with any EntityInsider blocks.
-func (l *Living) checkEntityInsiders(entityBBox cube.BBox, tx *world.Tx) {
+func (l *Living) checkEntityInsiders(entityBBox cube.BBox) {
 	box := entityBBox.Grow(-0.0001)
 	low, high := cube.PosFromVec3(box.Min()), cube.PosFromVec3(box.Max())
 
@@ -645,17 +634,17 @@ func (l *Living) checkEntityInsiders(entityBBox cube.BBox, tx *world.Tx) {
 		for x := low[0]; x <= high[0]; x++ {
 			for z := low[2]; z <= high[2]; z++ {
 				blockPos := cube.Pos{x, y, z}
-				b := tx.Block(blockPos)
+				b := l.tx.Block(blockPos)
 				if collide, ok := b.(block.EntityInsider); ok {
-					collide.EntityInside(blockPos, tx, l)
+					collide.EntityInside(blockPos, l.tx, l)
 					if _, liquid := b.(world.Liquid); liquid {
 						continue
 					}
 				}
 
-				if lq, ok := tx.Liquid(blockPos); ok {
+				if lq, ok := l.tx.Liquid(blockPos); ok {
 					if collide, ok := lq.(block.EntityInsider); ok {
-						collide.EntityInside(blockPos, tx, l)
+						collide.EntityInside(blockPos, l.tx, l)
 					}
 				}
 			}
@@ -664,13 +653,13 @@ func (l *Living) checkEntityInsiders(entityBBox cube.BBox, tx *world.Tx) {
 }
 
 // checkOnGround checks if the player is currently considered to be on the ground.
-func (l *Living) checkOnGround(tx *world.Tx) bool {
+func (l *Living) checkOnGround() bool {
 	box := l.entityType.BBox(l).Translate(l.Position())
-	
+
 	// Create a small area below the entity to check for ground
 	groundCheck := cube.Box(
-		box.Min()[0] - 0.001, box.Min()[1] - 0.001, box.Min()[2] - 0.001,
-		box.Max()[0] + 0.001, box.Min()[1] + 0.001, box.Max()[2] + 0.001,
+		box.Min()[0]-0.001, box.Min()[1]-0.001, box.Min()[2]-0.001,
+		box.Max()[0]+0.001, box.Min()[1]+0.001, box.Max()[2]+0.001,
 	)
 
 	low, high := cube.PosFromVec3(groundCheck.Min()), cube.PosFromVec3(groundCheck.Max())
@@ -678,13 +667,13 @@ func (l *Living) checkOnGround(tx *world.Tx) bool {
 		for z := low[2]; z <= high[2]; z++ {
 			for y := low[1]; y <= high[1]; y++ {
 				pos := cube.Pos{x, y, z}
-				boxList := tx.Block(pos).Model().BBox(pos, tx)
+				boxList := l.tx.Block(pos).Model().BBox(pos, l.tx)
 				for _, bb := range boxList {
 					blockBox := bb.Translate(pos.Vec3())
 					if blockBox.IntersectsWith(groundCheck) {
 						// Check if block surface is at the right height
-						if blockBox.Max()[1] >= box.Min()[1] - 0.001 && 
-						   blockBox.Max()[1] <= box.Min()[1] + 0.001 {
+						if blockBox.Max()[1] >= box.Min()[1]-0.001 &&
+							blockBox.Max()[1] <= box.Min()[1]+0.001 {
 							return true
 						}
 					}
@@ -696,14 +685,14 @@ func (l *Living) checkOnGround(tx *world.Tx) bool {
 }
 
 // Viewers returns the viewers.
-func (l *Living) Viewers(tx *world.Tx) []world.Viewer {
-	return tx.Viewers(l.data.Pos)
+func (l *Living) Viewers() []world.Viewer {
+	return l.tx.Viewers(l.data.Pos)
 }
 
 // insideOfSolid returns true if the player is inside a solid block.
-func (l *Living) insideOfSolid(tx *world.Tx) bool {
+func (l *Living) insideOfSolid() bool {
 	pos := cube.PosFromVec3(entity.EyePosition(l))
-	b, box := tx.Block(pos), l.handle.Type().BBox(l).Translate(l.Position())
+	b, box := l.tx.Block(pos), l.handle.Type().BBox(l).Translate(l.Position())
 
 	_, solid := b.Model().(model.Solid)
 	if !solid {
@@ -715,7 +704,7 @@ func (l *Living) insideOfSolid(tx *world.Tx) bool {
 		// Transparent.
 		return false
 	}
-	for _, blockBox := range b.Model().BBox(pos, tx) {
+	for _, blockBox := range b.Model().BBox(pos, l.tx) {
 		if blockBox.Translate(pos.Vec3()).IntersectsWith(box) {
 			return true
 		}
@@ -725,7 +714,7 @@ func (l *Living) insideOfSolid(tx *world.Tx) bool {
 
 // updateState updates the state of the player to all Viewers of the player.
 func (l *Living) updateState() {
-	for _, v := range l.Viewers(l.tx) {
+	for _, v := range l.Viewers() {
 		v.ViewEntityState(l)
 	}
 }
