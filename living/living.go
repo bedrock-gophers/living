@@ -220,7 +220,7 @@ func (l *Living) SetRotation(yaw, pitch float64) {
 	deltaYaw := yaw - currentRotation.Yaw()
 	deltaPitch := pitch - currentRotation.Pitch()
 
-	l.Move(mgl64.Vec3{}, deltaYaw, deltaPitch)
+	l.Move(mgl64.Vec3{}, deltaYaw, deltaPitch, l.tx)
 }
 
 // Dead returns if the entity is dead or not.
