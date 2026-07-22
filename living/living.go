@@ -30,8 +30,13 @@ type Living struct {
 	*livingData
 }
 
-func (l *Living) Heal(health float64, _ world.HealingSource) {
+func (l *Living) Heal(health float64, _ world.HealingSource) float64 {
+	if l.Dead() || health < 0 {
+		return 0
+	}
+	oldHealth := l.Health()
 	l.AddHealth(health)
+	return l.Health() - oldHealth
 }
 
 func (l *Living) Hurt(dmg float64, src world.DamageSource) (float64, bool) {
@@ -82,9 +87,7 @@ func (l *Living) Kill(_ world.DamageSource) {
 
 	// Wait a little before removing the entity. The client displays a death
 	// animation while the player is dying.
-	time.AfterFunc(time.Millisecond*1100, func() {
-		l.H().ExecWorld(finishDying)
-	})
+	l.H().DoAfter(time.Millisecond*1100, finishDying)
 }
 
 // finishDying completes the death of a player, removing it from the world.
