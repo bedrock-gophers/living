@@ -189,6 +189,9 @@ func (l *Living) Velocity() mgl64.Vec3 {
 // SetVelocity sets the velocity.
 func (l *Living) SetVelocity(velocity mgl64.Vec3) {
 	l.data.Vel = velocity
+	if tracker, ok := l.knockback.(KnockbackMotionTracker); ok {
+		tracker.SetVelocity(velocity)
+	}
 	if l.movement != nil {
 		l.movement.SetVelocity(velocity)
 	}
@@ -503,6 +506,9 @@ func (l *Living) LastDamage() float64 {
 
 // Tick ticks the entity, performing actions such as checking if the player is still breaking a block.
 func (l *Living) Tick(tx *world.Tx, current int64) {
+	if tracker, ok := l.knockback.(KnockbackMotionTracker); ok {
+		defer tracker.ResetKnockbackMotion()
+	}
 	l.age += 50 * time.Millisecond
 	ctx := event.C(l)
 	l.handler.HandleTick(*ctx, tx)

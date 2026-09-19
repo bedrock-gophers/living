@@ -29,6 +29,14 @@ type KnockbackCalculator interface {
 	CalculateKnockback(current, position, source mgl64.Vec3, force, height float64) (mgl64.Vec3, bool)
 }
 
+// KnockbackMotionTracker may be implemented by calculators that combine
+// server-issued impulses within a tick. SetVelocity observes each impulse and
+// ResetKnockbackMotion is called after the entity tick completes.
+type KnockbackMotionTracker interface {
+	SetVelocity(velocity mgl64.Vec3)
+	ResetKnockbackMotion()
+}
+
 type Config struct {
 	world.EntityType
 	*entity.MovementComputer
