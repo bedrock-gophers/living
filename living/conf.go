@@ -7,11 +7,34 @@ import (
 	"github.com/df-mc/dragonfly/server/entity"
 	"github.com/df-mc/dragonfly/server/entity/effect"
 	"github.com/df-mc/dragonfly/server/world"
+	"github.com/go-gl/mathgl/mgl64"
 )
+
+// MovementSimulator replaces the default MovementComputer for a Living entity.
+// Implementations run synchronously in the entity's world transaction.
+type MovementSimulator interface {
+	SimulateMovement(entity *Living, tx *world.Tx, tick int64) SimulatedMovement
+	SetVelocity(velocity mgl64.Vec3)
+}
+
+// SimulatedMovement is the collision-resolved movement produced for one tick.
+type SimulatedMovement struct {
+	Delta, Velocity mgl64.Vec3
+	OnGround        bool
+}
+
+// KnockbackCalculator calculates the velocity produced by a knockback impulse.
+// Returning false leaves the entity's velocity unchanged.
+type KnockbackCalculator interface {
+	CalculateKnockback(current, position, source mgl64.Vec3, force, height float64) (mgl64.Vec3, bool)
+}
 
 type Config struct {
 	world.EntityType
 	*entity.MovementComputer
+	MovementSimulator           MovementSimulator
+	Knockback                   KnockbackCalculator
+	Attachment                  any
 	Speed, EyeHeight, MaxHealth float64
 	Drops                       []Drop
 	ImmuneDuration              time.Duration
@@ -30,6 +53,9 @@ func (c Config) Apply(data *world.EntityData) {
 	data.Data = &livingData{
 		entityType:     c.EntityType,
 		mc:             c.MovementComputer,
+		movement:       c.MovementSimulator,
+		knockback:      c.Knockback,
+		attachment:     c.Attachment,
 		speed:          c.Speed,
 		eyeHeight:      c.EyeHeight,
 		HealthManager:  entity.NewHealthManager(c.MaxHealth, c.MaxHealth),

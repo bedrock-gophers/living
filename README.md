@@ -20,12 +20,12 @@ func accept(p *player.Player) {
     }
 
     conf := living.Config{
-                EntityType: entityTypeEnderman{},
-                Handler:    handler{}, 
-                Drops: []living.Drop{
-                    living.NewDrop(item.EnderPearl{}, 0, 2),
-                },
-        }
+        EntityType: entityTypeEnderman{},
+        Handler:    handler{},
+        Drops: []living.Drop{
+            living.NewDrop(item.EnderPearl{}, 0, 2),
+        },
+    }
     p.Tx().AddEntity(opts.New(conf.EntityType, conf))
 }
 ```
@@ -53,9 +53,33 @@ type handler struct {
 }
 
 // HandleHurt ...
-func (handler) HandleHurt(ctx *living.Context, damage float64, src world.DamageSource) {
+func (handler) HandleHurt(ctx living.Context, damage float64, immune bool, immunity *time.Duration, src world.DamageSource) {
 	fmt.Println("enderman hurt")
 }
 ```
 
 This code defines an example of creating an Enderman entity type and implementing a custom event handler for handling hurt events. You can extend this pattern to implement various other behaviors and interactions for your living entities.
+
+## Configurable movement and knockback
+
+`living.Config` accepts a `MovementSimulator` and `KnockbackCalculator` when an
+entity needs movement or impulse rules other than Dragonfly's defaults. Both
+interfaces run synchronously inside the entity's world transaction.
+
+## Player-shaped NPCs
+
+The `npc` package builds server-controlled, player-shaped entities on top of
+Living. An NPC owns its skin, inventories, armour, effects, combat state, and
+event handler, while movement and knockback remain configurable through its
+embedded `living.Config`.
+
+```go
+handle := world.EntitySpawnOpts{Position: position}.New(npc.Type, npc.Config{
+	Name: "Practice Bot",
+	Living: living.Config{
+		MovementComputer: &entity.MovementComputer{Gravity: 0.08, Drag: 0.02},
+		Knockback:        knockbackCalculator,
+	},
+})
+tx.AddEntity(handle)
+```

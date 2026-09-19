@@ -30,6 +30,14 @@ type Living struct {
 	*livingData
 }
 
+// Open opens a Living entity from data initialized by Config.Apply.
+func Open(tx *world.Tx, handle *world.EntityHandle, data *world.EntityData) *Living {
+	return &Living{livingData: data.Data.(*livingData), tx: tx, handle: handle, data: data}
+}
+
+// Attachment returns optional application-owned data supplied through Config.
+func (l *Living) Attachment() any { return l.attachment }
+
 func (l *Living) Heal(health float64, _ world.HealingSource) float64 {
 	if l.Dead() || health < 0 {
 		return 0
@@ -55,7 +63,12 @@ func (l *Living) Hurt(dmg float64, src world.DamageSource) (float64, bool) {
 
 	immunity := l.immuneDuration
 	ctx := event.C[*Living](l)
-	if l.handler.HandleHurt(*ctx, totalDamage, immune, &immunity, src); ctx.Cancelled() {
+	if handler, ok := l.handler.(MutableHurtHandler); ok {
+		handler.HandleMutableHurt(*ctx, &damageLeft, immune, &immunity, src)
+	} else {
+		l.handler.HandleHurt(*ctx, totalDamage, immune, &immunity, src)
+	}
+	if ctx.Cancelled() {
 		return 0, false
 	}
 	l.setAttackImmunity(immunity, totalDamage)
@@ -130,6 +143,13 @@ func (l *Living) KnockBack(src mgl64.Vec3, force, height float64) {
 // knockBack is an unexported function that is used to knock the player back. This function does not check if the player
 // can take damage or not.
 func (l *Living) knockBack(src mgl64.Vec3, force, height float64) {
+	if l.knockback != nil {
+		velocity, ok := l.knockback.CalculateKnockback(l.Velocity(), l.Position(), src, force, height)
+		if ok {
+			l.SetVelocity(velocity)
+		}
+		return
+	}
 	velocity := l.Position().Sub(src)
 	velocity[1] = 0
 
@@ -169,8 +189,19 @@ func (l *Living) Velocity() mgl64.Vec3 {
 // SetVelocity sets the velocity.
 func (l *Living) SetVelocity(velocity mgl64.Vec3) {
 	l.data.Vel = velocity
+	if l.movement != nil {
+		l.movement.SetVelocity(velocity)
+	}
 	for _, v := range l.Viewers() {
 		v.ViewEntityVelocity(l, velocity)
+	}
+}
+
+// SetMovementGravity changes gravity used by the default movement computer.
+// It has no effect while a custom MovementSimulator is installed.
+func (l *Living) SetMovementGravity(gravity float64) {
+	if l.mc != nil {
+		l.mc.Gravity = gravity
 	}
 }
 
@@ -496,11 +527,19 @@ func (l *Living) Tick(tx *world.Tx, current int64) {
 
 	l.onGround = l.checkOnGround()
 
-	m := l.mc.TickMovement(l, l.Position(), l.Velocity(), l.Rotation(), tx)
-	m.Send()
-
-	l.data.Vel = m.Velocity()
-	l.Move(m.Position().Sub(l.Position()), 0, 0)
+	if l.movement != nil {
+		movement := l.movement.SimulateMovement(l, tx, current)
+		l.onGround = movement.OnGround
+		l.Move(movement.Delta, 0, 0)
+		l.data.Vel = movement.Velocity
+		return
+	}
+	if l.mc != nil {
+		m := l.mc.TickMovement(l, l.Position(), l.Velocity(), l.Rotation(), tx)
+		m.Send()
+		l.data.Vel = m.Velocity()
+		l.Move(m.Position().Sub(l.Position()), 0, 0)
+	}
 }
 
 // Variant ...

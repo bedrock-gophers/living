@@ -11,10 +11,13 @@ import (
 type livingData struct {
 	entityType world.EntityType
 
-	age       time.Duration
-	mc        *entity.MovementComputer
-	speed     float64
-	eyeHeight float64
+	age        time.Duration
+	mc         *entity.MovementComputer
+	movement   MovementSimulator
+	knockback  KnockbackCalculator
+	attachment any
+	speed      float64
+	eyeHeight  float64
 	*entity.HealthManager
 
 	drops iter.Seq[Drop]

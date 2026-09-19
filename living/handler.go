@@ -1,9 +1,10 @@
 package living
 
 import (
+	"time"
+
 	"github.com/df-mc/dragonfly/server/event"
 	"github.com/df-mc/dragonfly/server/world"
-	"time"
 )
 
 type Context = event.Context[*Living]
@@ -13,6 +14,11 @@ type Handler interface {
 	HandleTick(ctx Context, tx *world.Tx)
 	// HandleHurt handles the entity being hurt.
 	HandleHurt(ctx Context, damage float64, immune bool, immunity *time.Duration, src world.DamageSource)
+}
+
+// MutableHurtHandler may be implemented by handlers that modify applied damage.
+type MutableHurtHandler interface {
+	HandleMutableHurt(ctx Context, damage *float64, immune bool, immunity *time.Duration, src world.DamageSource)
 }
 
 // NopHandler provides a no-op implementation of the Handler interface.

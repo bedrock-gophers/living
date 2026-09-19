@@ -8,14 +8,7 @@ import (
 type NopLivingType struct{}
 
 func (n NopLivingType) Open(tx *world.Tx, handle *world.EntityHandle, data *world.EntityData) world.Entity {
-	l := &Living{
-		livingData: data.Data.(*livingData),
-		tx:         tx,
-		handle:     handle,
-		data:       data,
-	}
-
-	return l
+	return Open(tx, handle, data)
 }
 
 func (NopLivingType) EncodeEntity() string {
